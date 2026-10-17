@@ -38,9 +38,19 @@ struct DashboardView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: WakSpacing.small) {
+                    WakPrimaryButton("Add Service") { openEditor(nil) }
+                    WakSecondaryButton("Import Docker Compose") { showComposeImport = true }
+                }
+                .padding(WakSpacing.regular)
+                .frame(maxWidth: .infinity)
+                .background(WakColor.surface)
+            }
             .navigationTitle("Servers")
             .scrollContentBackground(.hidden)
             .background(WakColor.background)
+            .tint(WakColor.primary)
             .toolbar {
                 ToolbarItemGroup {
                     Button { showComposeImport = true } label: { Image(systemName: "shippingbox.and.arrow.backward") }
@@ -65,11 +75,15 @@ struct DashboardView: View {
                     Button("Stop All") { Task { await runtime.stopAll(store.services) } }
                         .disabled(store.services.isEmpty)
                     Button("Refresh All") { Task { await refreshMonitoringSnapshot() } }
+                        .tint(WakColor.primary)
                     Toggle("Auto Refresh", isOn: $autoRefreshEnabled)
+                        .tint(WakColor.primary)
                         .toggleStyle(.checkbox)
                         .fixedSize()
                 }
-                Divider()
+                Rectangle()
+                    .fill(WakColor.divider)
+                    .frame(height: 1)
                 if let selected {
                     HStack {
                         Label(selected.name, systemImage: "server.rack")
@@ -97,6 +111,7 @@ struct DashboardView: View {
                         }
                     }
                     LabeledContent("Status", value: runtime.status(for: selected).rawValue)
+                        .foregroundStyle(WakColor.textPrimary)
                     HStack {
                         Text("Logs").font(.headline)
                         Spacer()
@@ -114,9 +129,26 @@ struct DashboardView: View {
                     }
                     .frame(minHeight: 120, maxHeight: 260)
                     .padding(12)
-                    .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+                    .background(WakColor.surfaceSecondary, in: RoundedRectangle(cornerRadius: 12))
                 } else {
-                    ContentUnavailableView("Choose a Service", systemImage: "server.rack", description: Text("Select a service or use + to register one."))
+                    WakCard {
+                        VStack(alignment: .leading, spacing: WakSpacing.regular) {
+                            Image(systemName: "server.rack")
+                                .font(.system(size: 34))
+                                .foregroundStyle(WakColor.primary)
+                            Text("No Service Selected")
+                                .font(WakTypography.sectionTitle)
+                                .foregroundStyle(WakColor.textPrimary)
+                            Text("Register a local server or import services from a Docker Compose project.")
+                                .font(WakTypography.body)
+                                .foregroundStyle(WakColor.textSecondary)
+                            HStack {
+                                WakPrimaryButton("Add Service") { openEditor(nil) }
+                                WakSecondaryButton("Import Docker Compose") { showComposeImport = true }
+                            }
+                        }
+                    }
+                    .frame(maxWidth: 520)
                 }
                 Spacer()
             }
@@ -124,6 +156,7 @@ struct DashboardView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(WakColor.background)
         }
+        .tint(WakColor.primary)
         .task(id: autoRefreshEnabled) {
             await refreshMonitoringSnapshot()
             guard autoRefreshEnabled else { return }
