@@ -47,9 +47,9 @@ enum ProjectDiscovery {
                 candidates.append(DiscoveredService(definition: .init(name: root.lastPathComponent, kind: .command, workingDirectory: root.path, command: suggestion.command, port: nil, group: root.lastPathComponent), note: "Detected npm script; verify command and port", isReady: true))
             }
         }
-        let registered = Set(existing.map { $0.kind.rawValue + "|" + URL(fileURLWithPath: $0.workingDirectory).standardizedFileURL.path + "|" + $0.command })
+        let registered = Set(existing.map { $0.kind.rawValue + "|" + URL(fileURLWithPath: $0.workingDirectory).standardizedFileURL.path })
         return candidates.filter {
-            !registered.contains($0.definition.kind.rawValue + "|" + $0.definition.workingDirectory + "|" + $0.definition.command)
+            !registered.contains($0.definition.kind.rawValue + "|" + $0.definition.workingDirectory)
         }.sorted { $0.definition.workingDirectory < $1.definition.workingDirectory }
     }
 }
