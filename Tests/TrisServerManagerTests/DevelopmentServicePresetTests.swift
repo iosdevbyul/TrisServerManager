@@ -1,0 +1,29 @@
+import XCTest
+@testable import TrisServerManager
+
+final class DevelopmentServicePresetTests: XCTestCase {
+    func testAllPresetsRequireUserSelectedFolder() {
+        XCTAssertEqual(DevelopmentServicePreset.known.count, 4)
+        for preset in DevelopmentServicePreset.known {
+            XCTAssertTrue(preset.draft().workingDirectory.isEmpty)
+            XCTAssertNotNil(preset.draft().validate())
+        }
+    }
+
+    func testUnknownDonghakLaunchCommandIsNotInvented() {
+        let preset = try! XCTUnwrap(DevelopmentServicePreset.known.first { $0.id == "donghak" })
+        XCTAssertTrue(preset.command.isEmpty)
+        XCTAssertNil(preset.port)
+    }
+
+    func testMarketLensDoesNotAssumeAvailablePort3000() {
+        let preset = try! XCTUnwrap(DevelopmentServicePreset.known.first { $0.id == "marketlens" })
+        XCTAssertEqual(preset.command, "npm run dev")
+        XCTAssertNil(preset.port)
+    }
+
+    func testSwiftServerPresetsHaveExplicitPorts() {
+        XCTAssertEqual(DevelopmentServicePreset.known.first { $0.id == "waktrainer" }?.port, 8081)
+        XCTAssertEqual(DevelopmentServicePreset.known.first { $0.id == "authentication" }?.port, 8080)
+    }
+}
