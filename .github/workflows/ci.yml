@@ -21,11 +21,23 @@ jobs:
             -project TrisServerManager.xcodeproj \
             -scheme TrisServerManager \
             -configuration Release \
-            -destination 'platform=macOS' \
+            -destination 'generic/platform=macOS' \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
             -derivedDataPath "$RUNNER_TEMP/TrisServerManagerDerivedData" \
             CODE_SIGNING_ALLOWED=NO
           APP="$RUNNER_TEMP/TrisServerManagerDerivedData/Build/Products/Release/TrisServerManager.app"
           test -d "$APP"
+          EXECUTABLE="$APP/Contents/MacOS/TrisServerManager"
+          file "$EXECUTABLE"
+          lipo -info "$EXECUTABLE"
+          ARCHITECTURES="$(lipo -archs "$EXECUTABLE")"
+          for ARCH in arm64 x86_64; do
+            case " $ARCHITECTURES " in
+              *" $ARCH "*) echo "Verified $ARCH" ;;
+              *) echo "Missing $ARCH architecture in Release binary"; exit 1 ;;
+            esac
+          done
           ditto -c -k --sequesterRsrc --keepParent "$APP" "$RUNNER_TEMP/TrisServerManager-unsigned.zip"
       - name: Upload unsigned build for testing
         uses: actions/upload-artifact@v4
