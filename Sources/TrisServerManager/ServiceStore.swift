@@ -47,6 +47,12 @@ final class ServiceStore {
         persist()
     }
 
+    func deleteAll() {
+        guard !services.isEmpty else { return }
+        services.removeAll()
+        persist()
+    }
+
     private func sameRegistration(_ lhs: ServiceDefinition, _ rhs: ServiceDefinition) -> Bool {
         lhs.kind == rhs.kind &&
         URL(fileURLWithPath: lhs.workingDirectory).resolvingSymlinksInPath().standardizedFileURL.path ==
