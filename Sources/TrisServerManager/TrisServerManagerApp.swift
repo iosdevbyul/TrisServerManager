@@ -1,7 +1,19 @@
 import SwiftUI
+import AppKit
+
+@MainActor
+final class ServerAppDelegate: NSObject, NSApplicationDelegate {
+    weak var runtime: ServiceRuntime?
+
+    func applicationWillTerminate(_ notification: Notification) {
+        runtime?.stopOwnedLocalProcesses()
+    }
+}
+
 
 @main
 struct TrisServerManagerApp: App {
+    @NSApplicationDelegateAdaptor(ServerAppDelegate.self) private var appDelegate
     @State private var store = ServiceStore()
     @State private var runtime = ServiceRuntime()
 
@@ -10,6 +22,7 @@ struct TrisServerManagerApp: App {
             DashboardView(store: store, runtime: runtime)
                 .frame(minWidth: 820, minHeight: 530)
                 .preferredColorScheme(.dark)
+                .onAppear { appDelegate.runtime = runtime }
         }
         .defaultSize(width: 1000, height: 650)
 
