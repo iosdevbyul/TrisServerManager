@@ -8,6 +8,8 @@ struct DashboardView: View {
     @State private var editing: ServiceDefinition?
     @State private var showEditor = false
     @State private var pendingDeletion: ServiceDefinition?
+    @State private var autoRefreshEnabled = true
+    @State private var lastRefreshed: Date?
 
     private var selected: ServiceDefinition? {
         store.services.first { $0.id == selectedID }
@@ -18,8 +20,14 @@ struct DashboardView: View {
             List(selection: $selectedID) {
                 Section("SERVICES") {
                     ForEach(store.services) { service in
-                        Label(service.name, systemImage: service.kind == .dockerCompose ? "shippingbox" : "terminal")
-                            .tag(service.id)
+                        HStack {
+                            Label(service.name, systemImage: service.kind == .dockerCompose ? "shippingbox" : "terminal")
+                            Spacer()
+                            Text(runtime.status(for: service).rawValue)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .tag(service.id)
                             .contextMenu {
                                 Button("Edit") { openEditor(service) }
                                     .disabled(runtime.status(for: service) == .running || runtime.status(for: service) == .starting || runtime.status(for: service) == .stopping)
@@ -53,7 +61,10 @@ struct DashboardView: View {
                         .disabled(store.services.isEmpty)
                     Button("Stop All") { Task { await runtime.stopAll(store.services) } }
                         .disabled(store.services.isEmpty)
-                    Button("Refresh All") { Task { await runtime.refreshAll(store.services) } }
+                    Button("Refresh All") { Task { await refreshMonitoringSnapshot() } }
+                    Toggle("Auto Refresh", isOn: $autoRefreshEnabled)
+                        .toggleStyle(.checkbox)
+                        .fixedSize()
                 }
                 Divider()
                 if let selected {
@@ -83,7 +94,15 @@ struct DashboardView: View {
                         }
                     }
                     LabeledContent("Status", value: runtime.status(for: selected).rawValue)
-                    Text("Logs").font(.headline)
+                    HStack {
+                        Text("Logs").font(.headline)
+                        Spacer()
+                        if let lastRefreshed {
+                            Text("Last checked \(lastRefreshed.formatted(date: .omitted, time: .standard))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     ScrollView {
                         Text(runtime.log(for: selected.id))
                             .font(.system(.caption, design: .monospaced))
@@ -102,7 +121,16 @@ struct DashboardView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(WakColor.background)
         }
-        .task { await runtime.refreshAll(store.services) }
+        .task(id: autoRefreshEnabled) {
+            await refreshMonitoringSnapshot()
+            guard autoRefreshEnabled else { return }
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(10)) }
+                catch { break }
+                guard !Task.isCancelled else { break }
+                await refreshMonitoringSnapshot()
+            }
+        }
         .sheet(isPresented: $showEditor) {
             ServiceEditorView(service: editing) { service in
                 if editing == nil { store.add(service) } else { store.update(service) }
@@ -134,6 +162,14 @@ struct DashboardView: View {
         )) { Button("OK") { store.errorMessage = nil } } message: {
             Text(store.errorMessage ?? "Unknown error")
         }
+    }
+
+    private func refreshMonitoringSnapshot() async {
+        await runtime.refreshAll(store.services)
+        if let selected, selected.kind == .dockerCompose {
+            await runtime.loadDockerLogs(selected)
+        }
+        lastRefreshed = .now
     }
 
     private func openEditor(_ service: ServiceDefinition?) {
