@@ -10,7 +10,7 @@ struct DiscoveredService: Identifiable {
 enum ProjectDiscovery {
     static func scan(root: URL, existing: [ServiceDefinition]) -> [DiscoveredService] {
         let fm = FileManager.default
-        let root = root.standardizedFileURL
+        let root = root.resolvingSymlinksInPath().standardizedFileURL
         var isDirectory: ObjCBool = false
         guard fm.fileExists(atPath: root.path, isDirectory: &isDirectory), isDirectory.boolValue else { return [] }
         let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey, .isHiddenKey]
@@ -27,7 +27,7 @@ enum ProjectDiscovery {
             if skipped.contains(url.lastPathComponent) { iterator.skipDescendants(); continue }
             let name = url.lastPathComponent
             if let preset = DevelopmentServicePreset.known.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
-                let draft = ServiceDefinition(name: preset.name, kind: .command, workingDirectory: url.path, command: preset.command, port: preset.port, group: preset.group)
+                let draft = ServiceDefinition(name: preset.name, kind: .command, workingDirectory: url.resolvingSymlinksInPath().standardizedFileURL.path, command: preset.command, port: preset.port, group: preset.group)
                 candidates.append(DiscoveredService(definition: draft, note: preset.command.isEmpty ? "Review: launch command unknown" : "Known preset; verify command and port", isReady: !preset.command.isEmpty))
             } else {
                 let suggestions = LocalProjectDetector.suggestions(in: url)
@@ -47,9 +47,9 @@ enum ProjectDiscovery {
                 candidates.append(DiscoveredService(definition: .init(name: root.lastPathComponent, kind: .command, workingDirectory: root.path, command: suggestion.command, port: nil, group: root.lastPathComponent), note: "Detected npm script; verify command and port", isReady: true))
             }
         }
-        let registered = Set(existing.map { $0.kind.rawValue + "|" + URL(fileURLWithPath: $0.workingDirectory).standardizedFileURL.path })
+        let registered = Set(existing.map { $0.kind.rawValue + "|" + URL(fileURLWithPath: $0.workingDirectory).resolvingSymlinksInPath().standardizedFileURL.path })
         return candidates.filter {
-            !registered.contains($0.definition.kind.rawValue + "|" + $0.definition.workingDirectory)
+            !registered.contains($0.definition.kind.rawValue + "|" + URL(fileURLWithPath: $0.definition.workingDirectory).resolvingSymlinksInPath().standardizedFileURL.path)
         }.sorted { $0.definition.workingDirectory < $1.definition.workingDirectory }
     }
 }
