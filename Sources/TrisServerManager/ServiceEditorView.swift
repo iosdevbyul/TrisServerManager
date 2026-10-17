@@ -14,6 +14,7 @@ struct ServiceEditorView: View {
     @State private var command: String
     @State private var port: String
     @State private var group: String
+    @State private var suggestions: [LocalCommandSuggestion] = []
 
     init(service: ServiceDefinition?, onSave: @escaping (ServiceDefinition) -> Void) {
         self.service = service
@@ -49,6 +50,28 @@ struct ServiceEditorView: View {
                     TextField("Working Directory", text: $directory)
                     Button("Browse…") { browseDirectory() }
                 }
+                if kind == .command {
+                    Button("Detect Project Commands") {
+                        suggestions = LocalProjectDetector.suggestions(in: URL(fileURLWithPath: directory))
+                    }
+                    .disabled(directory.isEmpty)
+                    if suggestions.isEmpty {
+                        Text("Select a project folder, then detect available commands.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        ForEach(suggestions) { suggestion in
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(suggestion.title).font(.subheadline)
+                                    Text(suggestion.command).font(.system(.caption, design: .monospaced))
+                                    Text(suggestion.explanation).font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button("Use") { command = suggestion.command }
+                            }
+                        }
+                    }
+                }
                 TextField(kind == .command ? "Start Command" : "Compose Service Name", text: $command)
                 TextField("Port (optional)", text: $port)
                 TextField("Group (optional)", text: $group)
@@ -77,6 +100,9 @@ struct ServiceEditorView: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK, let url = panel.url { directory = url.path }
+        if panel.runModal() == .OK, let url = panel.url {
+            directory = url.path
+            suggestions = LocalProjectDetector.suggestions(in: url)
+        }
     }
 }
