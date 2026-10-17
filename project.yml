@@ -1,0 +1,32 @@
+name: TrisServerManager
+options:
+  bundleIdPrefix: com.iosdevbyul
+  deploymentTarget:
+    macOS: '14.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.9'
+    CODE_SIGNING_ALLOWED: NO
+    ENABLE_APP_SANDBOX: NO
+    GENERATE_INFOPLIST_FILE: YES
+    MACOSX_DEPLOYMENT_TARGET: '14.0'
+targets:
+  TrisServerManager:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/TrisServerManager
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.iosdevbyul.TrisServerManager
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+  TrisServerManagerTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/TrisServerManagerTests
+    dependencies:
+      - target: TrisServerManager
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
