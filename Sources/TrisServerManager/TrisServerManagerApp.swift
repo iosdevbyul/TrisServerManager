@@ -8,6 +8,7 @@ struct TrisServerManagerApp: App {
         WindowGroup("TrisServerManager") {
             DashboardView(store: store)
                 .frame(minWidth: 820, minHeight: 530)
+                .preferredColorScheme(.dark)
         }
         .defaultSize(width: 1000, height: 650)
 
