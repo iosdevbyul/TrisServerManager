@@ -21,7 +21,7 @@ final class ServiceRuntime {
     @ObservationIgnored private var busy: Set<UUID> = []
 
     func status(for service: ServiceDefinition) -> ServiceRuntimeStatus {
-        statuses[service.id] ?? (service.kind == .dockerCompose ? .unknown : .stopped)
+        statuses[service.id] ?? .unknown
     }
 
     func log(for id: UUID) -> String { logs[id] ?? "No output yet." }
@@ -47,6 +47,17 @@ final class ServiceRuntime {
             return
         }
 
+        if let port = service.port {
+            do {
+                if try await RuntimeDiagnostics.isPortInUse(port) {
+                    fail(RuntimeFailure("Port \(port) is already in use."), for: service.id)
+                    return
+                }
+            } catch {
+                fail(error, for: service.id)
+                return
+            }
+        }
         let process = Process()
         let stdout = Pipe()
         let stderr = Pipe()
@@ -73,7 +84,7 @@ final class ServiceRuntime {
             Task { @MainActor in
                 guard let self, self.processes[service.id] === finished else { return }
                 self.processes[service.id] = nil
-                self.statuses[service.id] = finished.terminationStatus == 0 ? .stopped : .failed
+                self.statuses[service.id] = (finished.terminationStatus == 0 || (finished.terminationReason == .uncaughtSignal && finished.terminationStatus == 15)) ? .stopped : .failed
                 self.append("Process exited with status \\(finished.terminationStatus).\\n", to: service.id)
             }
         }
@@ -102,7 +113,12 @@ final class ServiceRuntime {
             } catch { fail(error, for: service.id) }
             return
         }
-        guard let process = processes[service.id], process.isRunning else {
+        guard let process = processes[service.id] else {
+            statuses[service.id] = .unknown
+            errorMessage = "This local process was not started by the app in this session."
+            return
+        }
+        guard process.isRunning else {
             statuses[service.id] = .stopped
             return
         }
@@ -115,7 +131,10 @@ final class ServiceRuntime {
     }
 
     func stopAll(_ services: [ServiceDefinition]) async {
-        for service in services.reversed() { await stop(service) }
+        for service in services.reversed() {
+            if service.kind == .command && processes[service.id] == nil { continue }
+            await stop(service)
+        }
     }
 
     func refresh(_ service: ServiceDefinition) async {
@@ -125,6 +144,14 @@ final class ServiceRuntime {
             let names = Set(output.split(whereSeparator: \.isNewline).map(String.init))
             statuses[service.id] = names.contains(service.command) ? .running : .stopped
         } catch { statuses[service.id] = .unknown }
+    }
+
+    func loadDockerLogs(_ service: ServiceDefinition) async {
+        guard service.kind == .dockerCompose, !busy.contains(service.id) else { return }
+        do {
+            let output = try await docker(["compose", "logs", "--no-color", "--tail", "200", service.command], in: service.workingDirectory)
+            logs[service.id] = String(output.suffix(50_000))
+        } catch { fail(error, for: service.id) }
     }
 
     func refreshAll(_ services: [ServiceDefinition]) async {

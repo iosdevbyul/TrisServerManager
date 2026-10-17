@@ -22,8 +22,9 @@ struct DashboardView: View {
                             .tag(service.id)
                             .contextMenu {
                                 Button("Edit") { openEditor(service) }
+                                    .disabled(runtime.status(for: service) == .running || runtime.status(for: service) == .starting || runtime.status(for: service) == .stopping)
                                 Button("Remove", role: .destructive) { pendingDeletion = service }
-                                    .disabled(runtime.status(for: service) == .running)
+                                    .disabled(runtime.status(for: service) == .running || runtime.status(for: service) == .starting || runtime.status(for: service) == .stopping)
                             }
                     }
                 }
@@ -52,6 +53,7 @@ struct DashboardView: View {
                         .disabled(store.services.isEmpty)
                     Button("Stop All") { Task { await runtime.stopAll(store.services) } }
                         .disabled(store.services.isEmpty)
+                    Button("Refresh All") { Task { await runtime.refreshAll(store.services) } }
                 }
                 Divider()
                 if let selected {
@@ -67,6 +69,9 @@ struct DashboardView: View {
                         Button("Stop") { Task { await runtime.stop(selected) } }
                             .disabled(runtime.status(for: selected) == .stopped || runtime.status(for: selected) == .stopping)
                         Button("Refresh") { Task { await runtime.refresh(selected) } }
+                        if selected.kind == .dockerCompose {
+                            Button("Load Logs") { Task { await runtime.loadDockerLogs(selected) } }
+                        }
                     }
                     WakCard {
                         VStack(alignment: .leading, spacing: WakSpacing.large) {
@@ -110,7 +115,7 @@ struct DashboardView: View {
         ), titleVisibility: .visible) {
             Button("Remove Registration", role: .destructive) {
                 guard let service = pendingDeletion else { return }
-                guard runtime.status(for: service) != .running else { return }
+                guard ![ServiceRuntimeStatus.running, .starting, .stopping].contains(runtime.status(for: service)) else { return }
                 store.delete(service.id)
                 runtime.forget(service.id)
                 if selectedID == service.id { selectedID = nil }
