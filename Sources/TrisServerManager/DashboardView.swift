@@ -8,6 +8,7 @@ struct DashboardView: View {
     @State private var editing: ServiceDefinition?
     @State private var showEditor = false
     @State private var showComposeImport = false
+    @State private var showProjectScan = false
     @State private var pendingDeletion: ServiceDefinition?
     @State private var autoRefreshEnabled = true
     @State private var lastRefreshed: Date?
@@ -40,7 +41,8 @@ struct DashboardView: View {
             }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: WakSpacing.small) {
-                    WakPrimaryButton("Add Service") { openEditor(nil) }
+                    WakPrimaryButton("Scan Projects") { showProjectScan = true }
+                    WakSecondaryButton("Add Service") { openEditor(nil) }
                     WakSecondaryButton("Import Docker Compose") { showComposeImport = true }
                 }
                 .padding(WakSpacing.regular)
@@ -53,6 +55,8 @@ struct DashboardView: View {
             .tint(WakColor.primary)
             .toolbar {
                 ToolbarItemGroup {
+                    Button { showProjectScan = true } label: { Image(systemName: "folder.badge.gearshape") }
+                        .help("Scan development projects")
                     Button { showComposeImport = true } label: { Image(systemName: "shippingbox.and.arrow.backward") }
                         .help("Import Docker Compose services")
                     Button { openEditor(nil) } label: { Image(systemName: "plus") }
@@ -165,6 +169,12 @@ struct DashboardView: View {
                 catch { break }
                 guard !Task.isCancelled else { break }
                 await refreshMonitoringSnapshot()
+            }
+        }
+        .sheet(isPresented: $showProjectScan) {
+            ProjectDiscoveryView(existingServices: store.services) { imported in
+                for service in imported { store.add(service) }
+                if let first = imported.first { selectedID = first.id }
             }
         }
         .sheet(isPresented: $showComposeImport) {
