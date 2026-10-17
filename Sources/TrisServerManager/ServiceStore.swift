@@ -18,7 +18,7 @@ final class ServiceStore {
     func add(_ service: ServiceDefinition) {
         guard let message = service.validate() else {
             guard !services.contains(where: { sameRegistration($0, service) }) else {
-                errorMessage = "This service directory and execution type are already registered."
+                errorMessage = "This service command is already registered in this directory."
                 return
             }
             services.append(service)
@@ -32,7 +32,7 @@ final class ServiceStore {
         guard let message = service.validate() else {
             guard let index = services.firstIndex(where: { $0.id == service.id }) else { return }
             guard !services.contains(where: { $0.id != service.id && sameRegistration($0, service) }) else {
-                errorMessage = "This service directory and execution type are already registered."
+                errorMessage = "This service command is already registered in this directory."
                 return
             }
             services[index] = service
@@ -51,7 +51,8 @@ final class ServiceStore {
         lhs.kind == rhs.kind &&
         URL(fileURLWithPath: lhs.workingDirectory).resolvingSymlinksInPath().standardizedFileURL.path ==
         URL(fileURLWithPath: rhs.workingDirectory).resolvingSymlinksInPath().standardizedFileURL.path &&
-        (lhs.kind == .command || lhs.command == rhs.command)
+        lhs.command.trimmingCharacters(in: .whitespacesAndNewlines) == rhs.command.trimmingCharacters(in: .whitespacesAndNewlines) &&
+        lhs.port == rhs.port
     }
 
     private func load() {
