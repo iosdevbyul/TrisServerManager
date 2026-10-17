@@ -99,7 +99,7 @@ struct ServiceEditorView: View {
                 TextField("Group (optional)", text: $group)
             }
             Text(kind == .command ? "Review the command and select the correct local project folder before saving." : "Example: db · Uses docker compose in the selected directory")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(WakTypography.caption).foregroundStyle(WakColor.textSecondary)
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }
@@ -114,6 +114,7 @@ struct ServiceEditorView: View {
         .padding(24)
         .frame(width: 560)
         .background(WakColor.background)
+        .tint(WakColor.primary)
         .preferredColorScheme(.dark)
     }
 
