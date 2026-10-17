@@ -128,13 +128,29 @@ final class ServiceRuntime {
     }
 
     func startAll(_ services: [ServiceDefinition]) async {
-        for service in services { await start(service) }
+        // Docker dependencies first, while preserving the user's relative order
+        // within each category. Compose up -d does not guarantee DB readiness.
+        let dockerServices = services.filter { $0.kind == .dockerCompose }
+        let localServices = services.filter { $0.kind == .command }
+        for service in dockerServices { await start(service) }
+        for service in localServices { await start(service) }
     }
 
     func stopAll(_ services: [ServiceDefinition]) async {
-        for service in services.reversed() {
-            if service.kind == .command && processes[service.id] == nil { continue }
+        // Stop local API processes before their Docker dependencies.
+        let localServices = services.filter { $0.kind == .command }
+        let dockerServices = services.filter { $0.kind == .dockerCompose }
+        for service in localServices.reversed() where processes[service.id] != nil {
             await stop(service)
+        }
+        for service in dockerServices.reversed() { await stop(service) }
+    }
+
+    func stopOwnedLocalProcesses() {
+        // Only touch Process instances started by this app session.
+        // This is called by macOS when the app terminates.
+        for process in processes.values where process.isRunning {
+            process.terminate()
         }
     }
 
