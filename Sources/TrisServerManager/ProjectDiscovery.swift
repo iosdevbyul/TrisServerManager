@@ -47,9 +47,17 @@ enum ProjectDiscovery {
                 candidates.append(DiscoveredService(definition: .init(name: root.lastPathComponent, kind: .command, workingDirectory: root.path, command: suggestion.command, port: nil, group: root.lastPathComponent), note: "Detected npm script; verify command and port", isReady: true))
             }
         }
-        let registered = Set(existing.map { $0.kind.rawValue + "|" + URL(fileURLWithPath: $0.workingDirectory).resolvingSymlinksInPath().standardizedFileURL.path })
-        return candidates.filter {
-            !registered.contains($0.definition.kind.rawValue + "|" + URL(fileURLWithPath: $0.definition.workingDirectory).resolvingSymlinksInPath().standardizedFileURL.path)
+        func normalizedDirectory(_ service: ServiceDefinition) -> String {
+            URL(fileURLWithPath: service.workingDirectory).resolvingSymlinksInPath().standardizedFileURL.path
+        }
+        return candidates.filter { candidate in
+            !existing.contains { service in
+                service.kind == candidate.definition.kind &&
+                normalizedDirectory(service) == normalizedDirectory(candidate.definition) &&
+                service.command.trimmingCharacters(in: .whitespacesAndNewlines) ==
+                    candidate.definition.command.trimmingCharacters(in: .whitespacesAndNewlines) &&
+                (service.kind == .dockerCompose || service.port == candidate.definition.port)
+            }
         }.sorted { $0.definition.workingDirectory < $1.definition.workingDirectory }
     }
 }
