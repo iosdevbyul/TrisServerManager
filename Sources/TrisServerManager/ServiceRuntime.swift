@@ -194,6 +194,14 @@ final class ServiceRuntime {
         for service in services { await refresh(service) }
     }
 
+    func canRemoveRegistrations(_ services: [ServiceDefinition]) -> Bool {
+        !services.isEmpty && services.allSatisfy { service in
+            !busy.contains(service.id) &&
+            processes[service.id] == nil &&
+            ![ServiceRuntimeStatus.running, .starting, .stopping].contains(status(for: service))
+        }
+    }
+
     func forget(_ id: UUID) {
         // A running process retains its registration until stopped; do not discard its handle.
         if processes[id] == nil {
