@@ -10,12 +10,18 @@ settings:
     ENABLE_APP_SANDBOX: NO
     GENERATE_INFOPLIST_FILE: YES
     MACOSX_DEPLOYMENT_TARGET: '14.0'
+packages:
+  WakTrainerDesignSystem:
+    url: https://github.com/iosdevbyul/WakTrainerDesignSystem.git
+    revision: 5930de48224164723ece27491dc23893a6761a3a
 targets:
   TrisServerManager:
     type: application
     platform: macOS
     sources:
       - Sources/TrisServerManager
+    dependencies:
+      - package: WakTrainerDesignSystem
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.iosdevbyul.TrisServerManager
