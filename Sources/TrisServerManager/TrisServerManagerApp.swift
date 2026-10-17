@@ -3,10 +3,11 @@ import SwiftUI
 @main
 struct TrisServerManagerApp: App {
     @State private var store = ServiceStore()
+    @State private var runtime = ServiceRuntime()
 
     var body: some Scene {
         WindowGroup("TrisServerManager") {
-            DashboardView(store: store)
+            DashboardView(store: store, runtime: runtime)
                 .frame(minWidth: 820, minHeight: 530)
                 .preferredColorScheme(.dark)
         }
@@ -16,14 +17,20 @@ struct TrisServerManagerApp: App {
             Text("\(store.services.count) registered services")
             Divider()
             ForEach(store.services) { service in
-                Label(service.name, systemImage: "circle.dotted")
+                Menu(service.name + " · " + runtime.status(for: service).rawValue) {
+                    Button("Start") { Task { await runtime.start(service) } }
+                    Button("Stop") { Task { await runtime.stop(service) } }
+                    if service.kind == .dockerCompose {
+                        Button("Refresh Status") { Task { await runtime.refresh(service) } }
+                    }
+                }
             }
             if store.services.isEmpty {
                 Text("Add services from the main window")
             }
             Divider()
-            Text("Execution controls coming in Phase 2")
-                .font(.caption)
+            Button("Start All") { Task { await runtime.startAll(store.services) } }
+            Button("Stop All") { Task { await runtime.stopAll(store.services) } }
         }
     }
 }
