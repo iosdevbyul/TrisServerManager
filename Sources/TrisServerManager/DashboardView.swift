@@ -7,6 +7,7 @@ struct DashboardView: View {
     @State private var selectedID: UUID?
     @State private var editing: ServiceDefinition?
     @State private var showEditor = false
+    @State private var showComposeImport = false
     @State private var pendingDeletion: ServiceDefinition?
     @State private var autoRefreshEnabled = true
     @State private var lastRefreshed: Date?
@@ -41,7 +42,9 @@ struct DashboardView: View {
             .scrollContentBackground(.hidden)
             .background(WakColor.background)
             .toolbar {
-                ToolbarItem {
+                ToolbarItemGroup {
+                    Button { showComposeImport = true } label: { Image(systemName: "shippingbox.and.arrow.backward") }
+                        .help("Import Docker Compose services")
                     Button { openEditor(nil) } label: { Image(systemName: "plus") }
                         .help("Add service")
                 }
@@ -129,6 +132,12 @@ struct DashboardView: View {
                 catch { break }
                 guard !Task.isCancelled else { break }
                 await refreshMonitoringSnapshot()
+            }
+        }
+        .sheet(isPresented: $showComposeImport) {
+            ComposeImportView(existingServices: store.services) { imported in
+                for service in imported { store.add(service) }
+                if let first = imported.first { selectedID = first.id }
             }
         }
         .sheet(isPresented: $showEditor) {
