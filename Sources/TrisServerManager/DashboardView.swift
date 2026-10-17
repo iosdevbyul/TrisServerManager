@@ -1,4 +1,5 @@
 import SwiftUI
+import WakTrainerDesignSystem
 
 struct DashboardView: View {
     @Bindable var store: ServiceStore
@@ -26,6 +27,8 @@ struct DashboardView: View {
                 }
             }
             .navigationTitle("Servers")
+            .scrollContentBackground(.hidden)
+            .background(WakColor.background)
             .toolbar {
                 ToolbarItem {
                     Button { openEditor(nil) } label: { Image(systemName: "plus") }
@@ -33,10 +36,12 @@ struct DashboardView: View {
                 }
             }
         } detail: {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: WakSpacing.large) {
                 HStack {
                     VStack(alignment: .leading) {
-                        Text("TrisServerManager").font(.largeTitle).bold()
+                        Text("TrisServerManager")
+                            .font(WakTypography.screenTitle)
+                            .foregroundStyle(WakColor.textPrimary)
                         Text("Manage your local development services")
                             .foregroundStyle(.secondary)
                     }
@@ -53,11 +58,15 @@ struct DashboardView: View {
                         Button("Edit") { openEditor(selected) }
                         Button("Remove", role: .destructive) { pendingDeletion = selected }
                     }
+                    WakCard {
+                        VStack(alignment: .leading, spacing: WakSpacing.large) {
                     LabeledContent("Type", value: selected.kind.rawValue)
                     LabeledContent("Group", value: selected.group.isEmpty ? "Ungrouped" : selected.group)
                     LabeledContent("Directory", value: selected.workingDirectory)
                     LabeledContent(selected.kind == .command ? "Command" : "Compose service", value: selected.command)
                     if let port = selected.port { LabeledContent("Port", value: String(port)) }
+                        }
+                    }
                     Label("Not monitored yet · Execution available in Phase 2", systemImage: "info.circle")
                         .foregroundStyle(.secondary)
                 } else {
@@ -66,6 +75,8 @@ struct DashboardView: View {
                 Spacer()
             }
             .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(WakColor.background)
         }
         .sheet(isPresented: $showEditor) {
             ServiceEditorView(service: editing) { service in
