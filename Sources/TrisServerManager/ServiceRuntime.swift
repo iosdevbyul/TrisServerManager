@@ -19,6 +19,7 @@ final class ServiceRuntime {
 
     @ObservationIgnored private var processes: [UUID: Process] = [:]
     @ObservationIgnored private var busy: Set<UUID> = []
+    @ObservationIgnored private var logRequests: Set<UUID> = []
 
     func status(for service: ServiceDefinition) -> ServiceRuntimeStatus {
         statuses[service.id] ?? .unknown
@@ -147,11 +148,15 @@ final class ServiceRuntime {
     }
 
     func loadDockerLogs(_ service: ServiceDefinition) async {
-        guard service.kind == .dockerCompose, !busy.contains(service.id) else { return }
+        guard service.kind == .dockerCompose, !busy.contains(service.id), !logRequests.contains(service.id) else { return }
+        logRequests.insert(service.id)
+        defer { logRequests.remove(service.id) }
         do {
             let output = try await docker(["compose", "logs", "--no-color", "--tail", "200", service.command], in: service.workingDirectory)
             logs[service.id] = String(output.suffix(50_000))
-        } catch { fail(error, for: service.id) }
+        } catch {
+            append("Could not refresh Docker logs: \(error.localizedDescription)\n", to: service.id)
+        }
     }
 
     func refreshAll(_ services: [ServiceDefinition]) async {
