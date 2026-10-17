@@ -8,6 +8,7 @@ enum ServiceRuntimeStatus: String {
     case stopping = "Stopping"
     case failed = "Failed"
     case unknown = "Unknown"
+    case portInUse = "Port In Use"
 }
 
 @MainActor
@@ -155,7 +156,21 @@ final class ServiceRuntime {
     }
 
     func refresh(_ service: ServiceDefinition) async {
-        guard service.kind == .dockerCompose, !busy.contains(service.id) else { return }
+        guard !busy.contains(service.id) else { return }
+        if service.kind == .command {
+            if let process = processes[service.id], process.isRunning {
+                statuses[service.id] = .running
+            } else if let port = service.port {
+                do {
+                    statuses[service.id] = try await RuntimeDiagnostics.isPortInUse(port) ? .portInUse : .stopped
+                } catch {
+                    statuses[service.id] = .unknown
+                }
+            } else {
+                statuses[service.id] = .unknown
+            }
+            return
+        }
         do {
             let output = try await docker(["compose", "ps", "--status", "running", "--services"], in: service.workingDirectory)
             let names = Set(output.split(whereSeparator: \.isNewline).map(String.init))
