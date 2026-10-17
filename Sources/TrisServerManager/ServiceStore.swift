@@ -52,7 +52,7 @@ final class ServiceStore {
         URL(fileURLWithPath: lhs.workingDirectory).resolvingSymlinksInPath().standardizedFileURL.path ==
         URL(fileURLWithPath: rhs.workingDirectory).resolvingSymlinksInPath().standardizedFileURL.path &&
         lhs.command.trimmingCharacters(in: .whitespacesAndNewlines) == rhs.command.trimmingCharacters(in: .whitespacesAndNewlines) &&
-        lhs.port == rhs.port
+        (lhs.kind == .dockerCompose || lhs.port == rhs.port)
     }
 
     private func load() {
