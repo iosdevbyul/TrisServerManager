@@ -15,6 +15,7 @@ struct ServiceEditorView: View {
     @State private var port: String
     @State private var group: String
     @State private var suggestions: [LocalCommandSuggestion] = []
+    @State private var selectedPresetID = ""
 
     init(service: ServiceDefinition?, onSave: @escaping (ServiceDefinition) -> Void) {
         self.service = service
@@ -42,6 +43,27 @@ struct ServiceEditorView: View {
                 .font(WakTypography.screenTitle)
                 .foregroundStyle(WakColor.textPrimary)
             Form {
+                if service == nil {
+                    Picker("Quick Setup", selection: $selectedPresetID) {
+                        Text("Custom Service").tag("")
+                        ForEach(DevelopmentServicePreset.known) { preset in
+                            Text(preset.name).tag(preset.id)
+                        }
+                    }
+                    .onChange(of: selectedPresetID) { _, newValue in
+                        guard let preset = DevelopmentServicePreset.known.first(where: { $0.id == newValue }) else { return }
+                        name = preset.name
+                        kind = .command
+                        command = preset.command
+                        port = preset.port.map(String.init) ?? ""
+                        group = preset.group
+                        directory = ""
+                        suggestions = []
+                    }
+                    if let preset = DevelopmentServicePreset.known.first(where: { $0.id == selectedPresetID }) {
+                        Text(preset.hint).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 TextField("Name", text: $name)
                 Picker("Execution Type", selection: $kind) {
                     ForEach(ServiceKind.allCases) { Text($0.rawValue).tag($0) }
@@ -76,7 +98,7 @@ struct ServiceEditorView: View {
                 TextField("Port (optional)", text: $port)
                 TextField("Group (optional)", text: $group)
             }
-            Text(kind == .command ? "Example: npm run dev" : "Example: db · Uses docker compose in the selected directory")
+            Text(kind == .command ? "Review the command and select the correct local project folder before saving." : "Example: db · Uses docker compose in the selected directory")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Spacer()
