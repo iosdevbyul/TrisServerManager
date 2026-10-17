@@ -1,4 +1,5 @@
 import SwiftUI
+import WakTrainerDesignSystem
 import AppKit
 
 struct ServiceEditorView: View {
@@ -35,8 +36,10 @@ struct ServiceEditorView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(service == nil ? "Add Service" : "Edit Service").font(.title2).bold()
+        VStack(alignment: .leading, spacing: WakSpacing.large) {
+            Text(service == nil ? "Add Service" : "Edit Service")
+                .font(WakTypography.screenTitle)
+                .foregroundStyle(WakColor.textPrimary)
             Form {
                 TextField("Name", text: $name)
                 Picker("Execution Type", selection: $kind) {
@@ -65,6 +68,8 @@ struct ServiceEditorView: View {
         }
         .padding(24)
         .frame(width: 560)
+        .background(WakColor.background)
+        .preferredColorScheme(.dark)
     }
 
     private func browseDirectory() {
