@@ -97,9 +97,9 @@ struct DashboardView: View {
                         Button("Remove", role: .destructive) { pendingDeletion = selected }
                             .disabled(runtime.status(for: selected) == .running)
                         Button("Start") { Task { await runtime.start(selected) } }
-                            .disabled(runtime.status(for: selected) == .running || runtime.status(for: selected) == .starting)
+                            .disabled(runtime.status(for: selected) == .running || runtime.status(for: selected) == .starting || runtime.status(for: selected) == .portInUse)
                         Button("Stop") { Task { await runtime.stop(selected) } }
-                            .disabled(runtime.status(for: selected) == .stopped || runtime.status(for: selected) == .stopping)
+                            .disabled(selected.kind == .command ? runtime.status(for: selected) != .running : (runtime.status(for: selected) == .stopped || runtime.status(for: selected) == .stopping))
                         Button("Refresh") { Task { await runtime.refresh(selected) } }
                         if selected.kind == .dockerCompose {
                             Button("Load Logs") { Task { await runtime.loadDockerLogs(selected) } }
@@ -156,7 +156,9 @@ struct DashboardView: View {
                 }
                 Spacer()
             }
-            .padding(24)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 24)
+            .padding(.top, 52)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(WakColor.background)
         }
