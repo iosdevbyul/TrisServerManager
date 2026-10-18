@@ -64,7 +64,7 @@ final class ServiceRuntime {
         let stdout = Pipe()
         let stderr = Pipe()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-lc", "exec " + service.command]
+        process.arguments = ["-lc", NodeEnvironmentResolver.wrap(service.command)]
         process.currentDirectoryURL = URL(fileURLWithPath: service.workingDirectory)
         process.standardOutput = stdout
         process.standardError = stderr
