@@ -193,10 +193,8 @@ final class ServiceRuntime {
             if let process = processes[service.id], process.isRunning {
                 if readinessTasks[service.id] != nil { return }
                 guard let port = service.port else { statuses[service.id] = .unknown; return }
-                do {
-                    let ready = await isReady(service, port: port)
-                    statuses[service.id] = ready ? .running : .unknown
-                } catch { statuses[service.id] = .unknown }
+                let ready = await isReady(service, port: port)
+                statuses[service.id] = ready ? .running : .unknown
             } else if let port = service.port {
                 do {
                     statuses[service.id] = try await RuntimeDiagnostics.isPortInUse(port) ? .portInUse : .stopped
