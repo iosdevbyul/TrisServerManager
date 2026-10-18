@@ -42,19 +42,24 @@ struct DashboardView: View {
             }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: WakSpacing.small) {
-                    WakPrimaryButton("Scan Projects") { showProjectScan = true }
-                    WakSecondaryButton("Add Service") { openEditor(nil) }
-                    WakSecondaryButton("Import Docker Compose") { showComposeImport = true }
-                    Button("Remove All Services", role: .destructive) {
-                        showRemoveAllConfirmation = true
+                    sidebarAction("Scan Projects", icon: "magnifyingglass", prominent: true) { showProjectScan = true }
+                    sidebarAction("Add Service", icon: "plus") { openEditor(nil) }
+                    sidebarAction("Import Docker Compose", icon: "shippingbox") { showComposeImport = true }
+                    Button(role: .destructive) { showRemoveAllConfirmation = true } label: {
+                        Label("Remove All", systemImage: "trash")
+                            .font(.caption)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.borderless)
                     .disabled(!runtime.canRemoveRegistrations(store.services))
-                    .foregroundStyle(WakColor.destructive)
+                    .padding(.top, 4)
                 }
-                .padding(WakSpacing.regular)
+                .padding(10)
                 .frame(maxWidth: .infinity)
                 .background(WakColor.surface)
             }
+            .navigationSplitViewColumnWidth(min: 220, ideal: 270, max: 360)
             .navigationTitle("Servers")
             .scrollContentBackground(.hidden)
             .background(WakColor.background)
@@ -70,6 +75,7 @@ struct DashboardView: View {
                 }
             }
         } detail: {
+            ScrollView {
             VStack(alignment: .leading, spacing: WakSpacing.large) {
                 HStack {
                     VStack(alignment: .leading) {
@@ -81,10 +87,13 @@ struct DashboardView: View {
                     }
                     Spacer()
                     Button("Start All") { Task { await runtime.startAll(store.services) } }
+                        .buttonStyle(.borderedProminent)
                         .disabled(store.services.isEmpty)
                     Button("Stop All") { Task { await runtime.stopAll(store.services) } }
+                        .buttonStyle(.bordered)
                         .disabled(store.services.isEmpty)
                     Button("Refresh All") { Task { await refreshMonitoringSnapshot() } }
+                        .buttonStyle(.bordered)
                         .tint(WakColor.primary)
                     Toggle("Auto Refresh", isOn: $autoRefreshEnabled)
                         .tint(WakColor.primary)
@@ -92,7 +101,7 @@ struct DashboardView: View {
                         .fixedSize()
                 }
                 Rectangle()
-                    .fill(WakColor.divider)
+                    .fill(WakColor.primary.opacity(0.35))
                     .frame(height: 1)
                 if let selected {
                     HStack {
@@ -121,8 +130,21 @@ struct DashboardView: View {
                     if let path = selected.effectiveHealthCheckPath { LabeledContent("HTTP Check", value: path) }
                         }
                     }
-                    LabeledContent("Status", value: runtime.status(for: selected).rawValue)
-                        .foregroundStyle(WakColor.textPrimary)
+                    HStack(spacing: 10) {
+                        Circle()
+                            .fill(statusColor(runtime.status(for: selected)))
+                            .frame(width: 9, height: 9)
+                        Text(runtime.status(for: selected).rawValue)
+                            .font(.headline)
+                        Spacer()
+                        if let port = selected.port {
+                            Text("PORT \(port)")
+                                .font(.system(.caption, design: .monospaced).weight(.semibold))
+                                .foregroundStyle(WakColor.textSecondary)
+                        }
+                    }
+                    .padding(14)
+                    .background(WakColor.surfaceSecondary, in: RoundedRectangle(cornerRadius: 12))
                     HStack {
                         Text("Logs").font(.headline)
                         Spacer()
@@ -141,6 +163,7 @@ struct DashboardView: View {
                     .frame(minHeight: 120, maxHeight: 260)
                     .padding(12)
                     .background(WakColor.surfaceSecondary, in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(WakColor.divider.opacity(0.7)))
                 } else {
                     WakCard {
                         VStack(alignment: .leading, spacing: WakSpacing.regular) {
@@ -161,12 +184,14 @@ struct DashboardView: View {
                     }
                     .frame(maxWidth: 520)
                 }
-                Spacer()
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 24)
             .padding(.top, 52)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(WakColor.background)
+            }
             .background(WakColor.background)
         }
         .tint(WakColor.primary)
@@ -234,6 +259,29 @@ struct DashboardView: View {
             get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } }
         )) { Button("OK") { store.errorMessage = nil } } message: {
             Text(store.errorMessage ?? "Unknown error")
+        }
+    }
+
+    private func sidebarAction(_ title: String, icon: String, prominent: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(maxWidth: .infinity, minHeight: 34)
+        }
+        .buttonStyle(.bordered)
+        .tint(prominent ? WakColor.primary : WakColor.surfaceSecondary)
+        .help(title)
+    }
+
+    private func statusColor(_ status: ServiceRuntimeStatus) -> Color {
+        switch status {
+        case .running: return .green
+        case .starting, .stopping: return .orange
+        case .failed: return .red
+        case .stopped: return WakColor.textSecondary
+        case .unknown, .portInUse: return .yellow
         }
     }
 

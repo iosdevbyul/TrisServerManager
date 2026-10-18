@@ -22,11 +22,15 @@ struct TrisServerManagerApp: App {
             DashboardView(store: store, runtime: runtime)
                 .frame(minWidth: 820, minHeight: 530)
                 .preferredColorScheme(.dark)
-                .onAppear { appDelegate.runtime = runtime }
+                .onAppear {
+                    appDelegate.runtime = runtime
+                    NSApplication.shared.applicationIconImage = TrisBranding.appIcon
+                }
         }
         .defaultSize(width: 1000, height: 650)
 
-        MenuBarExtra("TrisServerManager", systemImage: "server.rack") {
+        MenuBarExtra {
+
             Text("\(store.services.count) registered services")
             Divider()
             ForEach(store.services) { service in
@@ -44,6 +48,9 @@ struct TrisServerManagerApp: App {
             Divider()
             Button("Start All") { Task { await runtime.startAll(store.services) } }
             Button("Stop All") { Task { await runtime.stopAll(store.services) } }
+        } label: {
+            Image(nsImage: TrisBranding.menuIcon)
+                .accessibilityLabel("TrisServerManager")
         }
     }
 }
