@@ -118,6 +118,7 @@ struct DashboardView: View {
                     LabeledContent("Directory", value: selected.workingDirectory)
                     LabeledContent(selected.kind == .command ? "Command" : "Compose service", value: selected.command)
                     if let port = selected.port { LabeledContent("Port", value: String(port)) }
+                    if let path = selected.effectiveHealthCheckPath { LabeledContent("HTTP Check", value: path) }
                         }
                     }
                     LabeledContent("Status", value: runtime.status(for: selected).rawValue)
