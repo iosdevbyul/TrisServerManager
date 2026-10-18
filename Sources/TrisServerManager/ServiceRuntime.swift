@@ -104,7 +104,7 @@ final class ServiceRuntime {
                     guard let self else { return }
                     for _ in 0..<60 {
                         guard !Task.isCancelled, self.processes[service.id] === process, process.isRunning else { return }
-                        if (try? await RuntimeDiagnostics.isPortInUse(port)) == true {
+                        if (try? await RuntimeDiagnostics.isPortInUse(port)) == true && (service.effectiveHealthCheckPath == nil || await HTTPReadiness.check(port: port, path: service.effectiveHealthCheckPath!)) {
                             guard !Task.isCancelled, self.processes[service.id] === process else { return }
                             self.statuses[service.id] = .running
                             self.readinessTasks[service.id] = nil
@@ -115,7 +115,7 @@ final class ServiceRuntime {
                     }
                     guard !Task.isCancelled, self.processes[service.id] === process, process.isRunning else { return }
                     self.statuses[service.id] = .unknown
-                    self.append("Readiness unverified after 30 seconds. Process still running; check configured port.\n", to: service.id)
+                    self.append("Readiness unverified after 30 seconds. Check HTTP health path and port; process remains running.\n", to: service.id)
                     self.readinessTasks[service.id] = nil
                 }
             } else {
@@ -194,7 +194,9 @@ final class ServiceRuntime {
                 if readinessTasks[service.id] != nil { return }
                 guard let port = service.port else { statuses[service.id] = .unknown; return }
                 do {
-                    statuses[service.id] = try await RuntimeDiagnostics.isPortInUse(port) ? .running : .unknown
+                    let listening = try await RuntimeDiagnostics.isPortInUse(port)
+                    let ready = listening && (service.effectiveHealthCheckPath == nil || await HTTPReadiness.check(port: port, path: service.effectiveHealthCheckPath!))
+                    statuses[service.id] = ready ? .running : .unknown
                 } catch { statuses[service.id] = .unknown }
             } else if let port = service.port {
                 do {
