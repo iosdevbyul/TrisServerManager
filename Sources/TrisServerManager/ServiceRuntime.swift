@@ -104,7 +104,7 @@ final class ServiceRuntime {
                     guard let self else { return }
                     for _ in 0..<60 {
                         guard !Task.isCancelled, self.processes[service.id] === process, process.isRunning else { return }
-                        if (try? await RuntimeDiagnostics.isPortInUse(port)) == true && (service.effectiveHealthCheckPath == nil || await HTTPReadiness.check(port: port, path: service.effectiveHealthCheckPath!)) {
+                        if await isReady(service, port: port) {
                             guard !Task.isCancelled, self.processes[service.id] === process else { return }
                             self.statuses[service.id] = .running
                             self.readinessTasks[service.id] = nil
@@ -194,8 +194,7 @@ final class ServiceRuntime {
                 if readinessTasks[service.id] != nil { return }
                 guard let port = service.port else { statuses[service.id] = .unknown; return }
                 do {
-                    let listening = try await RuntimeDiagnostics.isPortInUse(port)
-                    let ready = listening && (service.effectiveHealthCheckPath == nil || await HTTPReadiness.check(port: port, path: service.effectiveHealthCheckPath!))
+                    let ready = await isReady(service, port: port)
                     statuses[service.id] = ready ? .running : .unknown
                 } catch { statuses[service.id] = .unknown }
             } else if let port = service.port {
@@ -246,6 +245,12 @@ final class ServiceRuntime {
             statuses[id] = nil
             logs[id] = nil
         }
+    }
+
+    private func isReady(_ service: ServiceDefinition, port: Int) async -> Bool {
+        guard (try? await RuntimeDiagnostics.isPortInUse(port)) == true else { return false }
+        guard let path = service.effectiveHealthCheckPath else { return true }
+        return await HTTPReadiness.check(port: port, path: path)
     }
 
     private func append(_ text: String, to id: UUID) {
