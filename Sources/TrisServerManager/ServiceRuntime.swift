@@ -92,7 +92,7 @@ final class ServiceRuntime {
                 self.readinessTasks[service.id] = nil
                 self.processes[service.id] = nil
                 self.statuses[service.id] = (finished.terminationStatus == 0 || (finished.terminationReason == .uncaughtSignal && finished.terminationStatus == 15)) ? .stopped : .failed
-                self.append("Process exited with status \\(finished.terminationStatus).\\n", to: service.id)
+                self.append("Process exited with status \(finished.terminationStatus).\n", to: service.id)
             }
         }
         do {
@@ -259,7 +259,7 @@ final class ServiceRuntime {
     private func fail(_ error: Error, for id: UUID) {
         statuses[id] = .failed
         errorMessage = error.localizedDescription
-        append("ERROR: \\(error.localizedDescription)\\n", to: id)
+        append("ERROR: \(error.localizedDescription)\n", to: id)
     }
 
     private nonisolated func docker(_ args: [String], in directory: String) async throws -> String {
