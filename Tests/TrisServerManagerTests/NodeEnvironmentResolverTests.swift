@@ -8,7 +8,8 @@ final class NodeEnvironmentResolverTests: XCTestCase {
         XCTAssertTrue(script.contains("nvm use --silent node"))
         XCTAssertTrue(script.contains("Project .nvmrc found"))
         XCTAssertTrue(script.contains("[Environment] Effective Node.js"))
-        XCTAssertTrue(script.hasSuffix("exec npm run dev"))
+        XCTAssertTrue(script.contains("Starting service command...\u0027\\nexec npm run dev"))
+        XCTAssertTrue(script.hasSuffix("\\nexec npm run dev"))
     }
 
     func testSwiftLaunchIsNotModified() {
