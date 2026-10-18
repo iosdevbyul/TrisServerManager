@@ -9,7 +9,7 @@ enum NodeEnvironmentResolver {
             return "exec " + command
         }
 
-        return """
+        let setup = """
         echo '[Environment] Inspecting Node.js runtime...'
         if command -v node >/dev/null 2>&1; then
           echo "[Environment] Initial Node.js: $(node -v) ($(command -v node))"
@@ -40,6 +40,7 @@ enum NodeEnvironmentResolver {
           echo '[Environment] Node.js is unavailable. Check the configured runtime.'
         fi
         echo '[Environment] Starting service command...'
-        exec """ + command
+        """
+        return setup + "exec " + command
     }
 }
