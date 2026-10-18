@@ -13,7 +13,7 @@ final class ProjectScanSourceFolderTests: XCTestCase {
         let matches = ProjectDiscovery.scan(root: root, existing: [])
             .filter { $0.definition.name == "WakTrainerServer" }
         XCTAssertEqual(matches.count, 1)
-        XCTAssertEqual(matches.first?.definition.workingDirectory, server.path)
+        XCTAssertEqual(matches.first?.definition.workingDirectory, server.resolvingSymlinksInPath().standardizedFileURL.path)
     }
 
     func testNestedIndependentPackageIsStillDiscovered() throws {
@@ -27,6 +27,6 @@ final class ProjectScanSourceFolderTests: XCTestCase {
 
         let matches = ProjectDiscovery.scan(root: root, existing: [])
         XCTAssertEqual(matches.count, 2)
-        XCTAssertTrue(matches.contains { $0.definition.workingDirectory == nested.path && !$0.isReady })
+        XCTAssertTrue(matches.contains { URL(fileURLWithPath: $0.definition.workingDirectory).resolvingSymlinksInPath().standardizedFileURL.path == nested.resolvingSymlinksInPath().standardizedFileURL.path && !$0.isReady })
     }
 }
