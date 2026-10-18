@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class DuplicateServiceStoreTests: XCTestCase {
-    func testRejectsDuplicateLocalDirectoryEvenWithDifferentCommand() throws {
+    func testAllowsDifferentCommandsButRejectsExactDuplicate() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -15,7 +15,11 @@ final class DuplicateServiceStoreTests: XCTestCase {
         duplicate.id = UUID()
         duplicate.command = "swift run Other"
         store.add(duplicate)
-        XCTAssertEqual(store.services.count, 1)
+        XCTAssertEqual(store.services.count, 2)
+        var identical = first
+        identical.id = UUID()
+        store.add(identical)
+        XCTAssertEqual(store.services.count, 2)
         XCTAssertNotNil(store.errorMessage)
     }
 
