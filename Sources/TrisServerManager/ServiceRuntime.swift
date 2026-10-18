@@ -21,6 +21,7 @@ final class ServiceRuntime {
     @ObservationIgnored private var processes: [UUID: Process] = [:]
     @ObservationIgnored private var busy: Set<UUID> = []
     @ObservationIgnored private var logRequests: Set<UUID> = []
+    @ObservationIgnored private var readinessTasks: [UUID: Task<Void, Never>] = [:]
 
     func status(for service: ServiceDefinition) -> ServiceRuntimeStatus {
         statuses[service.id] ?? .unknown
@@ -85,6 +86,8 @@ final class ServiceRuntime {
             stderr.fileHandleForReading.readabilityHandler = nil
             Task { @MainActor in
                 guard let self, self.processes[service.id] === finished else { return }
+                self.readinessTasks[service.id]?.cancel()
+                self.readinessTasks[service.id] = nil
                 self.processes[service.id] = nil
                 self.statuses[service.id] = (finished.terminationStatus == 0 || (finished.terminationReason == .uncaughtSignal && finished.terminationStatus == 15)) ? .stopped : .failed
                 self.append("Process exited with status \\(finished.terminationStatus).\\n", to: service.id)
@@ -93,7 +96,30 @@ final class ServiceRuntime {
         do {
             try process.run()
             processes[service.id] = process
-            statuses[service.id] = .running
+            if let port = service.port {
+                readinessTasks[service.id]?.cancel()
+                readinessTasks[service.id] = Task { [weak self] in
+                    guard let self else { return }
+                    for _ in 0..<60 {
+                        guard !Task.isCancelled, self.processes[service.id] === process, process.isRunning else { return }
+                        if (try? await RuntimeDiagnostics.isPortInUse(port)) == true {
+                            guard !Task.isCancelled, self.processes[service.id] === process else { return }
+                            self.statuses[service.id] = .running
+                            self.readinessTasks[service.id] = nil
+                            return
+                        }
+                        do { try await Task.sleep(for: .milliseconds(500)) }
+                        catch { return }
+                    }
+                    guard !Task.isCancelled, self.processes[service.id] === process, process.isRunning else { return }
+                    self.statuses[service.id] = .unknown
+                    self.append("Readiness unverified after 30 seconds. Process still running; check configured port.\n", to: service.id)
+                    self.readinessTasks[service.id] = nil
+                }
+            } else {
+                statuses[service.id] = .unknown
+                append("Process launched but no port is configured; readiness is unverified.\n", to: service.id)
+            }
         } catch {
             stdout.fileHandleForReading.readabilityHandler = nil
             stderr.fileHandleForReading.readabilityHandler = nil
@@ -124,6 +150,8 @@ final class ServiceRuntime {
             statuses[service.id] = .stopped
             return
         }
+        readinessTasks[service.id]?.cancel()
+        readinessTasks[service.id] = nil
         process.terminate()
         // State is reconciled by terminationHandler. Never kill an unrelated PID.
     }
@@ -150,6 +178,8 @@ final class ServiceRuntime {
     func stopOwnedLocalProcesses() {
         // Only touch Process instances started by this app session.
         // This is called by macOS when the app terminates.
+        for task in readinessTasks.values { task.cancel() }
+        readinessTasks.removeAll()
         for process in processes.values where process.isRunning {
             process.terminate()
         }
@@ -159,7 +189,11 @@ final class ServiceRuntime {
         guard !busy.contains(service.id) else { return }
         if service.kind == .command {
             if let process = processes[service.id], process.isRunning {
-                statuses[service.id] = .running
+                if readinessTasks[service.id] != nil { return }
+                guard let port = service.port else { statuses[service.id] = .unknown; return }
+                do {
+                    statuses[service.id] = try await RuntimeDiagnostics.isPortInUse(port) ? .running : .unknown
+                } catch { statuses[service.id] = .unknown }
             } else if let port = service.port {
                 do {
                     statuses[service.id] = try await RuntimeDiagnostics.isPortInUse(port) ? .portInUse : .stopped
