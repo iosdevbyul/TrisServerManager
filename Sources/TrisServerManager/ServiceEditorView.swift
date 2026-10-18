@@ -14,6 +14,7 @@ struct ServiceEditorView: View {
     @State private var command: String
     @State private var port: String
     @State private var group: String
+    @State private var healthCheckPath: String
     @State private var suggestions: [LocalCommandSuggestion] = []
     @State private var selectedPresetID = ""
 
@@ -27,6 +28,7 @@ struct ServiceEditorView: View {
         _command = State(initialValue: service?.command ?? "")
         _port = State(initialValue: service?.port.map(String.init) ?? "")
         _group = State(initialValue: service?.group ?? "")
+        _healthCheckPath = State(initialValue: service?.healthCheckPath ?? "")
     }
 
     private var parsedPort: Int? { Int(port) }
@@ -34,7 +36,8 @@ struct ServiceEditorView: View {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !directory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        (port.isEmpty || (parsedPort.map { (1...65535).contains($0) } ?? false))
+        (port.isEmpty || (parsedPort.map { (1...65535).contains($0) } ?? false)) &&
+        (healthCheckPath.isEmpty || (kind == .command && parsedPort != nil && healthCheckPath.hasPrefix("/") && !healthCheckPath.hasPrefix("//") && !healthCheckPath.contains("?") && !healthCheckPath.contains("#")))
     }
 
     var body: some View {
@@ -57,6 +60,7 @@ struct ServiceEditorView: View {
                         command = preset.command
                         port = preset.port.map(String.init) ?? ""
                         group = preset.group
+                        healthCheckPath = preset.name == "TrisAuthenticationServer" ? "/hello" : (preset.name == "WakTrainerServer" ? "/health" : "")
                         directory = ""
                         suggestions = []
                     }
@@ -96,6 +100,9 @@ struct ServiceEditorView: View {
                 }
                 TextField(kind == .command ? "Start Command" : "Compose Service Name", text: $command)
                 TextField("Port (optional)", text: $port)
+                if kind == .command {
+                    TextField("HTTP Health Path (optional, e.g. /health)", text: $healthCheckPath)
+                }
                 TextField("Group (optional)", text: $group)
             }
             Text(kind == .command ? "Review the command and select the correct local project folder before saving." : "Example: db · Uses docker compose in the selected directory")
@@ -104,7 +111,7 @@ struct ServiceEditorView: View {
                 Spacer()
                 Button("Cancel") { dismiss() }
                 Button("Save") {
-                    onSave(ServiceDefinition(id: id, name: name, kind: kind, workingDirectory: directory, command: command, port: parsedPort, group: group))
+                    onSave(ServiceDefinition(id: id, name: name, kind: kind, workingDirectory: directory, command: command, port: parsedPort, group: group, healthCheckPath: healthCheckPath))
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
