@@ -27,6 +27,8 @@ final class ServiceRuntime {
         statuses[service.id] ?? .unknown
     }
 
+    func ownsRunningProcess(_ id: UUID) -> Bool { processes[id]?.isRunning == true }
+
     func log(for id: UUID) -> String { logs[id] ?? "No output yet." }
 
     func start(_ service: ServiceDefinition) async {
