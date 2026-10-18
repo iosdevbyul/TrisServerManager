@@ -104,7 +104,7 @@ final class ServiceRuntime {
                     guard let self else { return }
                     for _ in 0..<60 {
                         guard !Task.isCancelled, self.processes[service.id] === process, process.isRunning else { return }
-                        if (try? await RuntimeDiagnostics.isPortInUse(port)) == true {
+                        if await isReady(service, port: port) {
                             guard !Task.isCancelled, self.processes[service.id] === process else { return }
                             self.statuses[service.id] = .running
                             self.readinessTasks[service.id] = nil
@@ -115,7 +115,7 @@ final class ServiceRuntime {
                     }
                     guard !Task.isCancelled, self.processes[service.id] === process, process.isRunning else { return }
                     self.statuses[service.id] = .unknown
-                    self.append("Readiness unverified after 30 seconds. Process still running; check configured port.\n", to: service.id)
+                    self.append("Readiness unverified after 30 seconds. Check HTTP health path and port; process remains running.\n", to: service.id)
                     self.readinessTasks[service.id] = nil
                 }
             } else {
@@ -193,9 +193,8 @@ final class ServiceRuntime {
             if let process = processes[service.id], process.isRunning {
                 if readinessTasks[service.id] != nil { return }
                 guard let port = service.port else { statuses[service.id] = .unknown; return }
-                do {
-                    statuses[service.id] = try await RuntimeDiagnostics.isPortInUse(port) ? .running : .unknown
-                } catch { statuses[service.id] = .unknown }
+                let ready = await isReady(service, port: port)
+                statuses[service.id] = ready ? .running : .unknown
             } else if let port = service.port {
                 do {
                     statuses[service.id] = try await RuntimeDiagnostics.isPortInUse(port) ? .portInUse : .stopped
@@ -244,6 +243,12 @@ final class ServiceRuntime {
             statuses[id] = nil
             logs[id] = nil
         }
+    }
+
+    private func isReady(_ service: ServiceDefinition, port: Int) async -> Bool {
+        guard (try? await RuntimeDiagnostics.isPortInUse(port)) == true else { return false }
+        guard let path = service.effectiveHealthCheckPath else { return true }
+        return await HTTPReadiness.check(port: port, path: path)
     }
 
     private func append(_ text: String, to id: UUID) {
