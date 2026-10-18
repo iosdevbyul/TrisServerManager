@@ -271,7 +271,7 @@ struct DashboardView: View {
                 .minimumScaleFactor(0.85)
                 .frame(maxWidth: .infinity, minHeight: 34)
         }
-        .buttonStyle(prominent ? .borderedProminent : .bordered)
+        .buttonStyle(.bordered)
         .tint(prominent ? WakColor.primary : WakColor.surfaceSecondary)
         .help(title)
     }
