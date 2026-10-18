@@ -13,7 +13,6 @@ struct DashboardView: View {
     @State private var showRemoveAllConfirmation = false
     @State private var autoRefreshEnabled = true
     @State private var lastRefreshed: Date?
-    @State private var sidebarWidth: CGFloat = 250
 
     private var selected: ServiceDefinition? {
         store.services.first { $0.id == selectedID }
