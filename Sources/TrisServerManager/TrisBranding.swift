@@ -3,13 +3,13 @@ import SwiftUI
 
 enum TrisBranding {
     static let appIcon: NSImage = {
-        let image = NSImage(data: Data(base64Encoded: iconPNG)!) ?? NSImage()
+        let image = NSImage(data: Data(base64Encoded: iconPNG, options: .ignoreUnknownCharacters) ?? Data()) ?? NSImage()
         image.size = NSSize(width: 128, height: 128)
         return image
     }()
 
     static let menuIcon: NSImage = {
-        let image = NSImage(data: Data(base64Encoded: menuPNG)!) ?? NSImage()
+        let image = NSImage(data: Data(base64Encoded: menuPNG, options: .ignoreUnknownCharacters) ?? Data()) ?? NSImage()
         image.size = NSSize(width: 19, height: 19)
         image.isTemplate = true
         return image
