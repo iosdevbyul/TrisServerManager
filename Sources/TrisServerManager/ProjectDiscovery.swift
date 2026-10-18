@@ -26,6 +26,13 @@ enum ProjectDiscovery {
             guard values?.isDirectory == true else { continue }
             if skipped.contains(url.lastPathComponent) { iterator.skipDescendants(); continue }
             let name = url.lastPathComponent
+            // A matching folder name alone is not evidence of an executable project.
+            // Require a manifest in this directory, not in an ancestor.
+            let manifestNames = ["Package.swift", "package.json", "pyproject.toml", "requirements.txt", "manage.py"]
+            let hasManifest = manifestNames.contains {
+                fm.fileExists(atPath: url.appendingPathComponent($0).path)
+            }
+            guard hasManifest else { continue }
             if let preset = DevelopmentServicePreset.known.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
                 let draft = ServiceDefinition(name: preset.name, kind: .command, workingDirectory: url.resolvingSymlinksInPath().standardizedFileURL.path, command: preset.command, port: preset.port, group: preset.group)
                 candidates.append(DiscoveredService(definition: draft, note: preset.command.isEmpty ? "Review: launch command unknown" : "Known preset; verify command and port", isReady: !preset.command.isEmpty))
