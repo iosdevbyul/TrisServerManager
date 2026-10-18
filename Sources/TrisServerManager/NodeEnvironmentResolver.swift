@@ -41,6 +41,6 @@ enum NodeEnvironmentResolver {
         fi
         echo '[Environment] Starting service command...'
         """
-        return setup + "exec " + command
+        return setup + "\nexec " + command
     }
 }
