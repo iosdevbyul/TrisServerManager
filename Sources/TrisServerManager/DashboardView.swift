@@ -10,6 +10,7 @@ struct DashboardView: View {
     @State private var showComposeImport = false
     @State private var showProjectScan = false
     @State private var pendingDeletion: ServiceDefinition?
+    @State private var showRemoveAllConfirmation = false
     @State private var autoRefreshEnabled = true
     @State private var lastRefreshed: Date?
 
@@ -44,6 +45,11 @@ struct DashboardView: View {
                     WakPrimaryButton("Scan Projects") { showProjectScan = true }
                     WakSecondaryButton("Add Service") { openEditor(nil) }
                     WakSecondaryButton("Import Docker Compose") { showComposeImport = true }
+                    Button("Remove All Services", role: .destructive) {
+                        showRemoveAllConfirmation = true
+                    }
+                    .disabled(!runtime.canRemoveRegistrations(store.services))
+                    .foregroundStyle(WakColor.destructive)
                 }
                 .padding(WakSpacing.regular)
                 .frame(maxWidth: .infinity)
@@ -190,6 +196,18 @@ struct DashboardView: View {
                 if editing == nil { store.add(service) } else { store.update(service) }
                 selectedID = service.id
             }
+        }
+        .confirmationDialog("Remove all registered services?", isPresented: $showRemoveAllConfirmation, titleVisibility: .visible) {
+            Button("Remove All Registrations", role: .destructive) {
+                guard runtime.canRemoveRegistrations(store.services) else { return }
+                let ids = store.services.map(\.id)
+                store.deleteAll()
+                ids.forEach { runtime.forget($0) }
+                selectedID = nil
+                pendingDeletion = nil
+            }
+        } message: {
+            Text("This removes all \(store.services.count) service registrations from TrisServerManager. It does not stop servers, delete Docker containers or volumes, or remove project files. This cannot be undone.")
         }
         .confirmationDialog("Remove this service?", isPresented: Binding(
             get: { pendingDeletion != nil },
