@@ -105,7 +105,7 @@ struct DashboardView: View {
                         Button("Start") { Task { await runtime.start(selected) } }
                             .disabled(runtime.status(for: selected) == .running || runtime.status(for: selected) == .starting || runtime.status(for: selected) == .portInUse)
                         Button("Stop") { Task { await runtime.stop(selected) } }
-                            .disabled(selected.kind == .command ? runtime.status(for: selected) != .running : (runtime.status(for: selected) == .stopped || runtime.status(for: selected) == .stopping))
+                            .disabled(selected.kind == .command ? ![ServiceRuntimeStatus.running, .starting].contains(runtime.status(for: selected)) : (runtime.status(for: selected) == .stopped || runtime.status(for: selected) == .stopping))
                         Button("Refresh") { Task { await runtime.refresh(selected) } }
                         if selected.kind == .dockerCompose {
                             Button("Load Logs") { Task { await runtime.loadDockerLogs(selected) } }
