@@ -193,6 +193,30 @@ final class ServiceRuntime {
         // State is reconciled by terminationHandler. Never kill an unrelated PID.
     }
 
+    /// Run once on app launch. Recover only already-occupied ports; never start
+    /// stopped services unexpectedly and never retry continuously on refresh.
+    func recoverExistingServicesAtLaunch(_ services: [ServiceDefinition]) async {
+        for service in services where service.kind == .command {
+            guard let port = effectivePort(for: service),
+                  !busy.contains(service.id),
+                  !ownsRunningProcess(service.id) else { continue }
+            do {
+                guard try await RuntimeDiagnostics.isPortInUse(port) else { continue }
+                let eligible: Bool
+                if let record = managedRecords[service.id], record.port == port {
+                    eligible = true
+                } else {
+                    eligible = isNextDevService(service)
+                }
+                guard eligible else { continue }
+                append("[Startup] Existing listener detected; attempting verified automatic replacement.\n", to: service.id)
+                await start(service)
+            } catch {
+                append("[Startup] Port inspection unavailable; existing process preserved.\n", to: service.id)
+            }
+        }
+    }
+
     func startAll(_ services: [ServiceDefinition]) async {
         // Docker dependencies first, while preserving the user's relative order
         // within each category. Compose up -d does not guarantee DB readiness.
