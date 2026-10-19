@@ -230,6 +230,10 @@ struct DashboardView: View {
             .background(WakColor.background)
         }
         .tint(WakColor.primary)
+        .task {
+            // Recovery is a one-shot startup action, not part of periodic refresh.
+            await runtime.recoverExistingServicesAtLaunch(store.services)
+        }
         .task(id: autoRefreshEnabled) {
             await refreshMonitoringSnapshot()
             guard autoRefreshEnabled else { return }
