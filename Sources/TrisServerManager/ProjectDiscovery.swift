@@ -33,7 +33,24 @@ enum ProjectDiscovery {
                 fm.fileExists(atPath: url.appendingPathComponent($0).path)
             }
             guard hasManifest else { continue }
-            if let preset = DevelopmentServicePreset.known.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+            if name.caseInsensitiveCompare("DonghakStockVision") == .orderedSame {
+                let manifest = url.appendingPathComponent("pyproject.toml")
+                let content = (try? String(contentsOf: manifest, encoding: .utf8)) ?? ""
+                let hasAPI = content.contains("dsv-api") && content.contains("donghak_stock_vision.api_cli")
+                let snapshot = url.appendingPathComponent(".data/research-api-snapshot.json")
+                let executable = url.appendingPathComponent(".venv/bin/dsv-api")
+                let canRun = hasAPI && fm.fileExists(atPath: snapshot.path) && fm.isExecutableFile(atPath: executable.path)
+                let draft = ServiceDefinition(
+                    name: "DonghakStockVision API", kind: .command,
+                    workingDirectory: url.resolvingSymlinksInPath().standardizedFileURL.path,
+                    command: canRun ? ".venv/bin/dsv-api --snapshot .data/research-api-snapshot.json" : "",
+                    port: 8000, group: "DonghakStockVision", healthCheckPath: "/api/v1/health"
+                )
+                let note = canRun
+                    ? "Verified local API launcher and snapshot; review before starting"
+                    : "Review: API entry point detected; local .venv/bin/dsv-api and verified snapshot are required"
+                candidates.append(.init(definition: draft, note: hasAPI ? note : "Review: Python project does not declare the expected dsv-api entry point", isReady: canRun))
+            } else if let preset = DevelopmentServicePreset.known.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
                 let draft = ServiceDefinition(name: preset.name, kind: .command, workingDirectory: url.resolvingSymlinksInPath().standardizedFileURL.path, command: preset.command, port: preset.port, group: preset.group)
                 candidates.append(DiscoveredService(definition: draft, note: preset.command.isEmpty ? "Review: launch command unknown" : "Known preset; verify command and port", isReady: !preset.command.isEmpty))
             } else {
