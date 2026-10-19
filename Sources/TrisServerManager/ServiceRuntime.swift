@@ -22,6 +22,7 @@ final class ServiceRuntime {
     @ObservationIgnored private var busy: Set<UUID> = []
     @ObservationIgnored private var logRequests: Set<UUID> = []
     @ObservationIgnored private var readinessTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var managedRecords = ManagedProcessRegistry.load()
 
     func status(for service: ServiceDefinition) -> ServiceRuntimeStatus {
         statuses[service.id] ?? .unknown
@@ -33,7 +34,8 @@ final class ServiceRuntime {
 
     func start(_ service: ServiceDefinition) async {
         guard !busy.contains(service.id) else { return }
-        if status(for: service) == .running { return }
+        if let process = processes[service.id], process.isRunning { append("[Start] Already running; skipped.\n", to: service.id); return }
+        if service.kind == .dockerCompose && status(for: service) == .running { return }
         busy.insert(service.id)
         statuses[service.id] = .starting
         defer { busy.remove(service.id) }
@@ -55,8 +57,25 @@ final class ServiceRuntime {
         if let port = service.port {
             do {
                 if try await RuntimeDiagnostics.isPortInUse(port) {
-                    fail(RuntimeFailure("Port \(port) is already in use."), for: service.id)
-                    return
+                    guard let record = managedRecords[service.id], record.port == port,
+                          await ManagedListener.stopIfMatching(record) else {
+                        statuses[service.id] = .portInUse
+                        append("[Start] Port \(port) is occupied; no verified prior ownership. Skipped.\n", to: service.id)
+                        return
+                    }
+                    append("[Recovery] Previous recorded listener received SIGTERM.\n", to: service.id)
+                    var released = false
+                    for _ in 0..<30 {
+                        if try await !RuntimeDiagnostics.isPortInUse(port) { released = true; break }
+                        try await Task.sleep(for: .milliseconds(100))
+                    }
+                    guard released else {
+                        statuses[service.id] = .portInUse
+                        append("[Recovery] Port remained occupied; restart cancelled.\n", to: service.id)
+                        return
+                    }
+                    managedRecords[service.id] = nil
+                    ManagedProcessRegistry.save(managedRecords)
                 }
             } catch {
                 fail(error, for: service.id)
@@ -107,6 +126,15 @@ final class ServiceRuntime {
                         if await isReady(service, port: port) {
                             guard !Task.isCancelled, self.processes[service.id] === process else { return }
                             self.statuses[service.id] = .running
+                            if let listener = await ManagedListener.inspect(port: port),
+                               let expected = self.expectedExecutableName(service),
+                               expected == URL(fileURLWithPath: listener.executable).lastPathComponent {
+                                self.managedRecords[service.id] = ManagedProcessRecord(
+                                    serviceID: service.id, port: port, pid: listener.pid,
+                                    executable: listener.executable, startMarker: listener.startMarker)
+                                ManagedProcessRegistry.save(self.managedRecords)
+                                self.append("[Recovery] Saved managed listener identity.\n", to: service.id)
+                            }
                             self.readinessTasks[service.id] = nil
                             return
                         }
@@ -243,6 +271,12 @@ final class ServiceRuntime {
             statuses[id] = nil
             logs[id] = nil
         }
+    }
+
+    private func expectedExecutableName(_ service: ServiceDefinition) -> String? {
+        let tokens = service.command.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard tokens.count >= 3, tokens[0] == "swift", tokens[1] == "run" else { return nil }
+        return tokens[2]
     }
 
     private func isReady(_ service: ServiceDefinition, port: Int) async -> Bool {
