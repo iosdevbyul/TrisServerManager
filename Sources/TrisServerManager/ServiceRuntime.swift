@@ -54,13 +54,20 @@ final class ServiceRuntime {
             return
         }
 
-        if let port = service.port {
+        if let port = effectivePort(for: service) {
             do {
                 if try await RuntimeDiagnostics.isPortInUse(port) {
-                    guard let record = managedRecords[service.id], record.port == port,
-                          await ManagedListener.stopIfMatching(record) else {
+                    let recovered: Bool
+                    if let record = managedRecords[service.id], record.port == port {
+                        recovered = await ManagedListener.stopIfMatching(record)
+                    } else if isNextDevService(service) {
+                        recovered = await ManagedListener.stopSameProjectNextListener(port: port, directory: service.workingDirectory)
+                    } else {
+                        recovered = false
+                    }
+                    guard recovered else {
                         statuses[service.id] = .portInUse
-                        append("[Start] Port \(port) is occupied; no verified prior ownership. Skipped.\n", to: service.id)
+                        append("[Start] Port \(port) belongs to another or unverified process; skipped.\n", to: service.id)
                         return
                     }
                     append("[Recovery] Previous recorded listener received SIGTERM.\n", to: service.id)
@@ -117,7 +124,7 @@ final class ServiceRuntime {
         do {
             try process.run()
             processes[service.id] = process
-            if let port = service.port {
+            if let port = effectivePort(for: service) {
                 readinessTasks[service.id]?.cancel()
                 readinessTasks[service.id] = Task { [weak self] in
                     guard let self else { return }
@@ -220,10 +227,10 @@ final class ServiceRuntime {
         if service.kind == .command {
             if let process = processes[service.id], process.isRunning {
                 if readinessTasks[service.id] != nil { return }
-                guard let port = service.port else { statuses[service.id] = .unknown; return }
+                guard let port = effectivePort(for: service) else { statuses[service.id] = .unknown; return }
                 let ready = await isReady(service, port: port)
                 statuses[service.id] = ready ? .running : .unknown
-            } else if let port = service.port {
+            } else if let port = effectivePort(for: service) {
                 do {
                     statuses[service.id] = try await RuntimeDiagnostics.isPortInUse(port) ? .portInUse : .stopped
                 } catch {
@@ -271,6 +278,16 @@ final class ServiceRuntime {
             statuses[id] = nil
             logs[id] = nil
         }
+    }
+
+    private func isNextDevService(_ service: ServiceDefinition) -> Bool {
+        service.kind == .command &&
+        service.name == "TrisMarketLens" &&
+        service.command.trimmingCharacters(in: .whitespacesAndNewlines) == "npm run dev"
+    }
+
+    private func effectivePort(for service: ServiceDefinition) -> Int? {
+        service.port ?? (isNextDevService(service) ? 3000 : nil)
     }
 
     private func expectedExecutableName(_ service: ServiceDefinition) -> String? {
