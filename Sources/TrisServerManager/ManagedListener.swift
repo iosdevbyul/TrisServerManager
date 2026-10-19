@@ -11,7 +11,7 @@ enum ManagedListener {
                   let pidString = pids.split(whereSeparator: \.isNewline).onlyElement,
                   let pid = Int32(pidString), pid > 1,
                   let owner = run("/bin/ps", ["-p", String(pid), "-o", "uid="]),
-                  Int32(owner.trimmingCharacters(in: .whitespacesAndNewlines)) == getuid(),
+                  UInt32(owner.trimmingCharacters(in: .whitespacesAndNewlines)) == getuid(),
                   let command = run("/bin/ps", ["-p", String(pid), "-o", "comm="]),
                   let started = run("/bin/ps", ["-p", String(pid), "-o", "lstart="]) else { return nil }
             return (pid, command.trimmingCharacters(in: .whitespacesAndNewlines),
