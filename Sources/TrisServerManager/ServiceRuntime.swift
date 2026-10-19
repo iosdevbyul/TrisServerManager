@@ -17,6 +17,7 @@ final class ServiceRuntime {
     private(set) var statuses: [UUID: ServiceRuntimeStatus] = [:]
     private(set) var logs: [UUID: String] = [:]
     var errorMessage: String?
+    var pendingConflict: PortConflict?
 
     @ObservationIgnored private var processes: [UUID: Process] = [:]
     @ObservationIgnored private var busy: Set<UUID> = []
@@ -67,7 +68,11 @@ final class ServiceRuntime {
                     }
                     guard recovered else {
                         statuses[service.id] = .portInUse
-                        append("[Start] Port \(port) belongs to another or unverified process; skipped.\n", to: service.id)
+                        append("[Start] Port \(port) needs approval to stop other services.\n", to: service.id)
+                        let conflict = await PortConflictInspector.inspect(port: port, service: service)
+                        if !conflict.targets.isEmpty && pendingConflict == nil {
+                            pendingConflict = conflict
+                        }
                         return
                     }
                     append("[Recovery] Previous recorded listener received SIGTERM.\n", to: service.id)
@@ -215,6 +220,34 @@ final class ServiceRuntime {
                 append("[Startup] Port inspection unavailable; existing process preserved.\n", to: service.id)
             }
         }
+    }
+
+    func cancelConflict() {
+        pendingConflict = nil
+    }
+
+    func approveConflict(_ conflict: PortConflict, targetIDs: Set<String>) async {
+        guard pendingConflict?.id == conflict.id else { return }
+        pendingConflict = nil
+        let selected = conflict.targets.filter { targetIDs.contains($0.id) }
+        guard !selected.isEmpty else { return }
+        for target in selected {
+            guard await PortConflictInspector.stop(target, port: conflict.port) else {
+                append("[Conflict] Could not safely stop \(target.title). No restart.\n", to: conflict.service.id)
+                statuses[conflict.service.id] = .portInUse
+                return
+            }
+            append("[Conflict] Approved stop sent to \(target.title).\n", to: conflict.service.id)
+        }
+        for _ in 0..<50 {
+            if (try? await RuntimeDiagnostics.isPortInUse(conflict.port)) == false {
+                await start(conflict.service)
+                return
+            }
+            do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+        }
+        statuses[conflict.service.id] = .portInUse
+        append("[Conflict] Port remains occupied after approved stops. New server was not started.\n", to: conflict.service.id)
     }
 
     func startAll(_ services: [ServiceDefinition]) async {

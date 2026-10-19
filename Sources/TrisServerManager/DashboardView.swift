@@ -125,7 +125,7 @@ struct DashboardView: View {
                                 .disabled(runtime.status(for: selected) == .running)
                             Button("Start") { Task { await runtime.start(selected) } }
                                 .buttonStyle(.borderedProminent)
-                                .disabled(runtime.status(for: selected) == .running || runtime.status(for: selected) == .starting || runtime.status(for: selected) == .portInUse)
+                                .disabled(runtime.status(for: selected) == .running || runtime.status(for: selected) == .starting || runtime.status(for: selected) == .stopping)
                             Button("Stop") { Task { await runtime.stop(selected) } }
                                 .disabled(selected.kind == .command ? !runtime.ownsRunningProcess(selected.id) : (runtime.status(for: selected) == .stopped || runtime.status(for: selected) == .stopping))
                             Button("Refresh") { Task { await runtime.refresh(selected) } }
@@ -242,6 +242,13 @@ struct DashboardView: View {
                 catch { break }
                 guard !Task.isCancelled else { break }
                 await refreshMonitoringSnapshot()
+            }
+        }
+        .sheet(item: $runtime.pendingConflict) { conflict in
+            PortConflictReviewView(conflict: conflict) { selectedIDs in
+                Task { await runtime.approveConflict(conflict, targetIDs: selectedIDs) }
+            } cancel: {
+                runtime.cancelConflict()
             }
         }
         .sheet(isPresented: $showProjectScan) {
