@@ -1,0 +1,62 @@
+import Foundation
+import Darwin
+
+/// Port ownership recovery is deliberately limited to exact previously recorded
+/// listener PIDs. A same-named executable alone is never sufficient.
+enum ManagedListener {
+    static func inspect(port: Int) async -> (pid: Int32, executable: String, startMarker: String)? {
+        await Task.detached(priority: .utility) {
+            guard (1...65535).contains(port) else { return nil }
+            guard let pids = run("/usr/sbin/lsof", ["-nP", "-t", "-iTCP:\(port)", "-sTCP:LISTEN"]),
+                  let pidString = pids.split(whereSeparator: \.isNewline).onlyElement,
+                  let pid = Int32(pidString), pid > 1,
+                  let owner = run("/bin/ps", ["-p", String(pid), "-o", "uid="]),
+                  UInt32(owner.trimmingCharacters(in: .whitespacesAndNewlines)) == getuid(),
+                  let command = run("/bin/ps", ["-p", String(pid), "-o", "comm="]),
+                  let started = run("/bin/ps", ["-p", String(pid), "-o", "lstart="]) else { return nil }
+            return (pid, command.trimmingCharacters(in: .whitespacesAndNewlines),
+                    started.trimmingCharacters(in: .whitespacesAndNewlines))
+        }.value
+    }
+
+    static func stopIfMatching(_ record: ManagedProcessRecord) async -> Bool {
+        guard let now = await inspect(port: record.port),
+              now.pid == record.pid,
+              now.executable == record.executable,
+              now.startMarker == record.startMarker else { return false }
+        return await Task.detached(priority: .utility) {
+            // Never use kill -9. Recheck the birth marker immediately before signaling.
+            guard let started = run("/bin/ps", ["-p", String(record.pid), "-o", "lstart="]),
+                  started.trimmingCharacters(in: .whitespacesAndNewlines) == record.startMarker
+            else { return false }
+            guard kill(record.pid, SIGTERM) == 0 else { return false }
+            for _ in 0..<30 {
+                if kill(record.pid, 0) != 0 { return true }
+                usleep(100_000)
+            }
+            return false
+        }.value
+    }
+
+    private static func run(_ executable: String, _ arguments: [String]) -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return nil }
+            return String(data: data, encoding: .utf8)
+        } catch { return nil }
+    }
+}
+
+private extension Collection {
+    var onlyElement: Element? {
+        count == 1 ? first : nil
+    }
+}
