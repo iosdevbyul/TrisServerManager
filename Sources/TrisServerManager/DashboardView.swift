@@ -104,32 +104,67 @@ struct DashboardView: View {
                     .fill(WakColor.primary.opacity(0.35))
                     .frame(height: 1)
                 if let selected {
-                    HStack {
-                        Label(selected.name, systemImage: "server.rack")
-                            .font(.title2).bold()
-                        Spacer()
-                        Button("Edit") { openEditor(selected) }
-                        Button("Remove", role: .destructive) { pendingDeletion = selected }
-                            .disabled(runtime.status(for: selected) == .running)
-                        Button("Start") { Task { await runtime.start(selected) } }
-                            .disabled(runtime.status(for: selected) == .running || runtime.status(for: selected) == .starting || runtime.status(for: selected) == .portInUse)
-                        Button("Stop") { Task { await runtime.stop(selected) } }
-                            .disabled(selected.kind == .command ? !runtime.ownsRunningProcess(selected.id) : (runtime.status(for: selected) == .stopped || runtime.status(for: selected) == .stopping))
-                        Button("Refresh") { Task { await runtime.refresh(selected) } }
-                        if selected.kind == .dockerCompose {
-                            Button("Load Logs") { Task { await runtime.loadDockerLogs(selected) } }
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(spacing: 12) {
+                            Image(systemName: selected.kind == .dockerCompose ? "shippingbox.fill" : "terminal.fill")
+                                .font(.title3)
+                                .foregroundStyle(WakColor.primary)
+                                .frame(width: 40, height: 40)
+                                .background(WakColor.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 11))
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(selected.name)
+                                    .font(.title2.weight(.bold))
+                                    .foregroundStyle(WakColor.textPrimary)
+                                Text(selected.kind.rawValue)
+                                    .font(.caption)
+                                    .foregroundStyle(WakColor.textSecondary)
+                            }
+                            Spacer()
+                            Button("Edit") { openEditor(selected) }
+                            Button("Remove", role: .destructive) { pendingDeletion = selected }
+                                .disabled(runtime.status(for: selected) == .running)
+                            Button("Start") { Task { await runtime.start(selected) } }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(runtime.status(for: selected) == .running || runtime.status(for: selected) == .starting || runtime.status(for: selected) == .portInUse)
+                            Button("Stop") { Task { await runtime.stop(selected) } }
+                                .disabled(selected.kind == .command ? !runtime.ownsRunningProcess(selected.id) : (runtime.status(for: selected) == .stopped || runtime.status(for: selected) == .stopping))
+                            Button("Refresh") { Task { await runtime.refresh(selected) } }
+                            if selected.kind == .dockerCompose {
+                                Button("Load Logs") { Task { await runtime.loadDockerLogs(selected) } }
+                            }
                         }
-                    }
-                    WakCard {
-                        VStack(alignment: .leading, spacing: WakSpacing.large) {
-                    LabeledContent("Type", value: selected.kind.rawValue)
-                    LabeledContent("Group", value: selected.group.isEmpty ? "Ungrouped" : selected.group)
-                    LabeledContent("Directory", value: selected.workingDirectory)
-                    LabeledContent(selected.kind == .command ? "Command" : "Compose service", value: selected.command)
-                    if let port = selected.port { LabeledContent("Port", value: String(port)) }
-                    if let path = selected.effectiveHealthCheckPath { LabeledContent("HTTP Check", value: path) }
+                        Rectangle().fill(WakColor.primary.opacity(0.3)).frame(height: 1)
+                        HStack(spacing: 12) {
+                            detailTile("GROUP", value: selected.group.isEmpty ? "Ungrouped" : selected.group, symbol: "square.stack.3d.up")
+                            detailTile("PORT", value: selected.port.map(String.init) ?? "Not set", symbol: "network")
+                            if let path = selected.effectiveHealthCheckPath {
+                                detailTile("HEALTH", value: path, symbol: "heart.text.square")
+                            }
                         }
+                        VStack(alignment: .leading, spacing: 9) {
+                            Label("WORKING DIRECTORY", systemImage: "folder")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(WakColor.textSecondary)
+                            Text(selected.workingDirectory)
+                                .font(.system(.subheadline, design: .monospaced))
+                                .foregroundStyle(WakColor.textPrimary)
+                                .textSelection(.enabled)
+                            Divider().overlay(WakColor.divider)
+                            Label(selected.kind == .command ? "START COMMAND" : "COMPOSE SERVICE", systemImage: "terminal")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(WakColor.textSecondary)
+                            Text(selected.command)
+                                .font(.system(.subheadline, design: .monospaced))
+                                .foregroundStyle(WakColor.primary)
+                                .textSelection(.enabled)
+                        }
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(WakColor.background.opacity(0.65), in: RoundedRectangle(cornerRadius: 12))
                     }
+                    .padding(18)
+                    .background(WakColor.surface, in: RoundedRectangle(cornerRadius: 18))
+                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(WakColor.primary.opacity(0.22)))
                     HStack(spacing: 10) {
                         Circle()
                             .fill(statusColor(runtime.status(for: selected)))
@@ -260,6 +295,22 @@ struct DashboardView: View {
         )) { Button("OK") { store.errorMessage = nil } } message: {
             Text(store.errorMessage ?? "Unknown error")
         }
+    }
+
+    private func detailTile(_ title: String, value: String, symbol: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: symbol)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(WakColor.textSecondary)
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(WakColor.textPrimary)
+                .lineLimit(1)
+                .help(value)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(WakColor.surfaceSecondary, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func sidebarAction(_ title: String, icon: String, prominent: Bool = false, action: @escaping () -> Void) -> some View {
