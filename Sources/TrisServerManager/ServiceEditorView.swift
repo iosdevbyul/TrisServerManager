@@ -35,8 +35,8 @@ struct ServiceEditorView: View {
     private var isValid: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !directory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        (port.isEmpty || (parsedPort.map { (1...65535).contains($0) } ?? false)) &&
+        (kind == .homebrewPostgres || !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) &&
+        (kind == .homebrewPostgres ? (parsedPort.map { (1...65535).contains($0) } ?? false) : (port.isEmpty || (parsedPort.map { (1...65535).contains($0) } ?? false))) &&
         (healthCheckPath.isEmpty || (kind == .command && parsedPort != nil && healthCheckPath.hasPrefix("/") && !healthCheckPath.hasPrefix("//") && !healthCheckPath.contains("?") && !healthCheckPath.contains("#")))
     }
 
@@ -98,20 +98,20 @@ struct ServiceEditorView: View {
                         }
                     }
                 }
-                TextField(kind == .command ? "Start Command" : "Compose Service Name", text: $command)
-                TextField("Port (optional)", text: $port)
+                if kind != .homebrewPostgres { TextField(kind == .command ? "Start Command" : "Compose Service Name", text: $command) }
+                TextField(kind == .homebrewPostgres ? "PostgreSQL Port" : "Port (optional)", text: $port)
                 if kind == .command {
                     TextField("HTTP Health Path (optional, e.g. /health)", text: $healthCheckPath)
                 }
                 TextField("Group (optional)", text: $group)
             }
-            Text(kind == .command ? "Review the command and select the correct local project folder before saving." : "Example: db · Uses docker compose in the selected directory")
+            Text(kind == .homebrewPostgres ? "Select an existing initialized PostgreSQL 16 data directory containing PG_VERSION. No database is installed or migrated automatically." : (kind == .command ? "Review the command and select the correct local project folder before saving." : "Example: db · Uses docker compose in the selected directory"))
                 .font(WakTypography.caption).foregroundStyle(WakColor.textSecondary)
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }
                 Button("Save") {
-                    onSave(ServiceDefinition(id: id, name: name, kind: kind, workingDirectory: directory, command: command, port: parsedPort, group: group, healthCheckPath: healthCheckPath))
+                    onSave(ServiceDefinition(id: id, name: name, kind: kind, workingDirectory: directory, command: kind == .homebrewPostgres ? "" : command, port: parsedPort, group: group, healthCheckPath: kind == .command ? healthCheckPath : nil))
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)

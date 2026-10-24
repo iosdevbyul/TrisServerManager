@@ -24,7 +24,7 @@ struct DashboardView: View {
                 Section("SERVICES") {
                     ForEach(store.services) { service in
                         HStack {
-                            Label(service.name, systemImage: service.kind == .dockerCompose ? "shippingbox" : "terminal")
+                            Label(service.name, systemImage: service.kind == .dockerCompose ? "shippingbox" : (service.kind == .homebrewPostgres ? "externaldrive" : "terminal"))
                             Spacer()
                             Text(runtime.status(for: service).rawValue)
                                 .font(.caption2)
@@ -106,7 +106,7 @@ struct DashboardView: View {
                 if let selected {
                     VStack(alignment: .leading, spacing: 14) {
                         HStack(spacing: 12) {
-                            Image(systemName: selected.kind == .dockerCompose ? "shippingbox.fill" : "terminal.fill")
+                            Image(systemName: selected.kind == .dockerCompose ? "shippingbox.fill" : (selected.kind == .homebrewPostgres ? "externaldrive.fill" : "terminal.fill"))
                                 .font(.title3)
                                 .foregroundStyle(WakColor.primary)
                                 .frame(width: 40, height: 40)
@@ -150,10 +150,10 @@ struct DashboardView: View {
                                 .foregroundStyle(WakColor.textPrimary)
                                 .textSelection(.enabled)
                             Divider().overlay(WakColor.divider)
-                            Label(selected.kind == .command ? "START COMMAND" : "COMPOSE SERVICE", systemImage: "terminal")
+                            Label(selected.kind == .homebrewPostgres ? "POSTGRESQL DATA DIRECTORY" : (selected.kind == .command ? "START COMMAND" : "COMPOSE SERVICE"), systemImage: "terminal")
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(WakColor.textSecondary)
-                            Text(selected.command)
+                            Text(selected.kind == .homebrewPostgres ? selected.workingDirectory : selected.command)
                                 .font(.system(.subheadline, design: .monospaced))
                                 .foregroundStyle(WakColor.primary)
                                 .textSelection(.enabled)
@@ -208,7 +208,7 @@ struct DashboardView: View {
                             Text("No Service Selected")
                                 .font(WakTypography.sectionTitle)
                                 .foregroundStyle(WakColor.textPrimary)
-                            Text("Register a local server or import services from a Docker Compose project.")
+                            Text("Register a local server, Homebrew PostgreSQL cluster, or Docker Compose service.")
                                 .font(WakTypography.body)
                                 .foregroundStyle(WakColor.textSecondary)
                             HStack {

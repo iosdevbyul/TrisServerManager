@@ -36,11 +36,12 @@ final class ServiceRuntime {
     func start(_ service: ServiceDefinition) async {
         guard !busy.contains(service.id) else { return }
         if let process = processes[service.id], process.isRunning { append("[Start] Already running; skipped.\n", to: service.id); return }
-        if service.kind == .dockerCompose && status(for: service) == .running { return }
+        if (service.kind == .dockerCompose || service.kind == .homebrewPostgres) && status(for: service) == .running { return }
         busy.insert(service.id)
         statuses[service.id] = .starting
         defer { busy.remove(service.id) }
 
+        if service.kind == .homebrewPostgres { await startPostgres(service); return }
         if service.kind == .dockerCompose {
             do {
                 let output = try await docker(["compose", "up", "-d", service.command], in: service.workingDirectory)
@@ -175,6 +176,7 @@ final class ServiceRuntime {
         statuses[service.id] = .stopping
         defer { busy.remove(service.id) }
 
+        if service.kind == .homebrewPostgres { await stopPostgres(service); return }
         if service.kind == .dockerCompose {
             do {
                 let output = try await docker(["compose", "stop", service.command], in: service.workingDirectory)
@@ -256,6 +258,7 @@ final class ServiceRuntime {
         let dockerServices = services.filter { $0.kind == .dockerCompose }
         let localServices = services.filter { $0.kind == .command }
         for service in dockerServices { await start(service) }
+        for service in services where service.kind == .homebrewPostgres { await start(service) }
         for service in localServices { await start(service) }
     }
 
@@ -266,6 +269,7 @@ final class ServiceRuntime {
         for service in localServices.reversed() where processes[service.id] != nil {
             await stop(service)
         }
+        for service in services.reversed() where service.kind == .homebrewPostgres { await stop(service) }
         for service in dockerServices.reversed() { await stop(service) }
     }
 
@@ -281,6 +285,7 @@ final class ServiceRuntime {
 
     func refresh(_ service: ServiceDefinition) async {
         guard !busy.contains(service.id) else { return }
+        if service.kind == .homebrewPostgres { await refreshPostgres(service); return }
         if service.kind == .command {
             if let process = processes[service.id], process.isRunning {
                 if readinessTasks[service.id] != nil { return }
@@ -335,6 +340,58 @@ final class ServiceRuntime {
             statuses[id] = nil
             logs[id] = nil
         }
+    }
+
+    private func postgresConfig(_ service: ServiceDefinition) throws -> (HomebrewPostgres.Cluster, String) {
+        guard let port = service.port else { throw HomebrewPostgres.ConfigurationError.invalidPort }
+        let cluster = HomebrewPostgres.Cluster(dataDirectory: service.workingDirectory, port: port)
+        try cluster.validate()
+        guard let binary = HomebrewPostgres.executablePath() else { throw HomebrewPostgres.ConfigurationError.missingExecutable }
+        return (cluster, binary)
+    }
+
+    private func refreshPostgres(_ service: ServiceDefinition) async {
+        do {
+            let (cluster, binary) = try postgresConfig(service)
+            let result = try await HomebrewPostgres.run(HomebrewPostgres.status(cluster, executable: binary))
+            switch result.exitCode {
+            case 0: statuses[service.id] = .running
+            case 3: statuses[service.id] = .stopped
+            default: statuses[service.id] = .unknown
+                append("[PostgreSQL] Status unavailable: \(result.output)\n", to: service.id)
+            }
+        } catch { fail(error, for: service.id) }
+    }
+
+    private func startPostgres(_ service: ServiceDefinition) async {
+        do {
+            let (cluster, binary) = try postgresConfig(service)
+            let status = try await HomebrewPostgres.run(HomebrewPostgres.status(cluster, executable: binary))
+            if status.exitCode == 0 { statuses[service.id] = .running; return }
+            guard status.exitCode == 3 else { throw RuntimeFailure("PostgreSQL status cannot be verified: \(status.output)") }
+            guard try await !RuntimeDiagnostics.isPortInUse(cluster.port) else {
+                statuses[service.id] = .portInUse
+                append("[PostgreSQL] Port \(cluster.port) is occupied; no process was stopped.\n", to: service.id)
+                return
+            }
+            let result = try await HomebrewPostgres.run(HomebrewPostgres.start(cluster, executable: binary))
+            append(result.output, to: service.id)
+            guard result.exitCode == 0 else { throw RuntimeFailure("PostgreSQL start failed: \(result.output)") }
+            await refreshPostgres(service)
+        } catch { fail(error, for: service.id) }
+    }
+
+    private func stopPostgres(_ service: ServiceDefinition) async {
+        do {
+            let (cluster, binary) = try postgresConfig(service)
+            let status = try await HomebrewPostgres.run(HomebrewPostgres.status(cluster, executable: binary))
+            if status.exitCode == 3 { statuses[service.id] = .stopped; return }
+            guard status.exitCode == 0 else { throw RuntimeFailure("PostgreSQL status cannot be verified: \(status.output)") }
+            let result = try await HomebrewPostgres.run(HomebrewPostgres.stop(cluster, executable: binary))
+            append(result.output, to: service.id)
+            guard result.exitCode == 0 else { throw RuntimeFailure("PostgreSQL stop failed: \(result.output)") }
+            await refreshPostgres(service)
+        } catch { fail(error, for: service.id) }
     }
 
     private func isNextDevService(_ service: ServiceDefinition) -> Bool {
