@@ -82,3 +82,24 @@ bash scripts/validate-postgres-isolated-restore.sh \
 Preconditions: create a separate throwaway PostgreSQL 16 cluster, start it on the selected loopback port, and provision the test role and a connection to the default `postgres` database. Confirm the cluster identity independently. The script rejects any existing database name and **never drops** or cleans up a database. If restore fails after creation, the partial test database is deliberately left for investigation.
 
 Successful exit confirms archive checksum, archive table of contents, and a database restore without PostgreSQL-reported errors. It does **not** validate roles, grants, row counts, extensions, consistency with concurrent writes, or application behavior. Inspect all of these separately before cutover. Never put credentials or dumps in GitHub.
+
+## Native PostgreSQL readiness check (phase 6)
+
+Once a **separate PostgreSQL 16 test cluster** has been prepared and started on a non-conflicting port, run:
+
+```bash
+bash scripts/check-local-postgres-readiness.sh \
+  --data-dir "$HOME/Library/Application Support/TrisServerManager/postgres-test" \
+  --port 5540
+```
+
+The tool checks the expected PostgreSQL major version, that `pg_ctl` reports the selected data directory running, and that the configured loopback port accepts connections. It **does not** stop Docker or start a service, nor prove that the TCP listener belongs to the selected cluster. Do not interpret this read-only smoke test as proof of successful migration.
+
+### Required before real cutover
+
+- Verify an actual backup, isolated restore, schema and row parity, role and extension compatibility, and representative application API queries.
+- Prove the connection is going to the intended PostgreSQL cluster, not another process occupying the expected port.
+- Update application database connection details only after those checks pass, with a tested rollback path.
+- Keep the original Docker volumes and containers intact until explicit approval to retire them.
+
+A GitHub Actions pass tests repository build and shell syntax, **not** Homebrew, Docker, or real database readiness on the user's Mac.
