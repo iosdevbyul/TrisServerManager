@@ -37,13 +37,8 @@ if command -v lsof >/dev/null && lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/n
   echo "Port $port is currently occupied. Stop or choose another port first." >&2; exit 1;
 fi
 mkdir -p "$(dirname "$data_dir")"
-# initdb creates the cluster directory. No password or authentication parameters
-# are read from shell history; secure local authentication must be configured
-# before exposing the service beyond loopback.
-"$initdb" -D "$data_dir" -A scram-sha-256 --pwfile=/dev/stdin <<EOF
-$(/usr/bin/openssl rand -base64 48)
-EOF
+# initdb securely prompts for a password; it is not passed through CLI or stored here.
+"$initdb" -D "$data_dir" -A scram-sha-256 -W
 echo "Created isolated PostgreSQL 16 cluster at $data_dir"
-echo "The bootstrap password was randomized and NOT stored by this script."
-echo "WARNING: Unless you separately retain/reconfigure the database superuser password, password authentication may be unusable."
+echo "Keep the password entered at the initdb prompt in your preferred password manager."
 echo "No service was started and no existing database was changed."
