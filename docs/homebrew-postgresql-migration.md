@@ -66,3 +66,19 @@ Repeat separately for `waktrainer-auth-local-db-1` with its actual database and 
 **Scope warning:** Each `pg_dump -Fc` includes one database only. Confirm all database names, cluster-level roles, grants, extensions, and ownership requirements before cutover. A valid checksum and `pg_restore --list` do **not** prove restorability: a separate isolated-cluster restore test, counts, schema checks, and application/API verification are required.
 
 Do not commit backups, credentials, connection strings, or database exports to GitHub.
+
+
+## Isolated restore rehearsal (phase 5)
+
+This step restores a verified custom-format archive into a **new test database** on an already running, disposable PostgreSQL 16 cluster. Choose a test port other than the existing 5433 and 5434 ports, and never point this script at a production or shared server.
+
+```bash
+bash scripts/validate-postgres-isolated-restore.sh \
+  --archive "$HOME/Developer/private-db-backups/ACTUAL_FILE.dump" \
+  --host 127.0.0.1 --port 5540 --user YOUR_TEST_ROLE \
+  --database tris_restore_waktrainer_check
+```
+
+Preconditions: create a separate throwaway PostgreSQL 16 cluster, start it on the selected loopback port, and provision the test role and a connection to the default `postgres` database. Confirm the cluster identity independently. The script rejects any existing database name and **never drops** or cleans up a database. If restore fails after creation, the partial test database is deliberately left for investigation.
+
+Successful exit confirms archive checksum, archive table of contents, and a database restore without PostgreSQL-reported errors. It does **not** validate roles, grants, row counts, extensions, consistency with concurrent writes, or application behavior. Inspect all of these separately before cutover. Never put credentials or dumps in GitHub.
