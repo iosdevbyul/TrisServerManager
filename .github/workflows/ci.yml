@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate PostgreSQL migration scripts
-        run: bash -n scripts/homebrew-postgres-preflight.sh scripts/create-homebrew-postgres-cluster.sh scripts/backup-docker-postgres.sh scripts/verify-postgres-backup.sh scripts/validate-postgres-isolated-restore.sh
+        run: bash -n scripts/homebrew-postgres-preflight.sh scripts/create-homebrew-postgres-cluster.sh scripts/backup-docker-postgres.sh scripts/verify-postgres-backup.sh scripts/validate-postgres-isolated-restore.sh scripts/check-local-postgres-readiness.sh
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate Xcode project
