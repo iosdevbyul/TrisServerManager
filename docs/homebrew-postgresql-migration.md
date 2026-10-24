@@ -25,3 +25,29 @@ The added `HomebrewPostgres` helper is not wired into service registrations or t
 ## Next implementation
 
 Add a dedicated `homebrewPostgres` service kind, an explicit cluster-directory and port editor, status/start/stop integration, and readiness checks. Keep manual install and migration as separate user-approved operations. Then test on the target Mac; macOS CI cannot verify local Homebrew installation or migrate real data.
+
+## Safe local preparation tools (phase 3)
+
+Run the read-only environment inspection from the repository root:
+
+```bash
+bash scripts/homebrew-postgres-preflight.sh
+```
+
+After reviewing the report, install PostgreSQL 16 separately if needed:
+
+```bash
+brew install postgresql@16
+```
+
+Only if you want to **create a brand-new empty cluster**, choose a unique path that does not already exist and explicitly opt in:
+
+```bash
+bash scripts/create-homebrew-postgres-cluster.sh \
+  --data-dir "$HOME/Library/Application Support/TrisServerManager/postgres-waktrainer" \
+  --port 5433 --create
+```
+
+The script calls `initdb` with an interactive password prompt. Save that password securely. The script **does not** start the database, change app connection settings, migrate existing data, or remove Docker containers. It refuses existing data directories. Create a second separate cluster only when the authentication server's actual requirements have been verified.
+
+**Do not run cluster initialization against a directory containing real PostgreSQL data.** The 5433/5434 mappings are examples from the current Docker setup and must not be assumed available when Docker is running. DB roles, ownership, passwords, schemas, extensions, and actual restore validation still require a later supervised migration. Keep Docker for rollback.
