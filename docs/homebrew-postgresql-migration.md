@@ -51,3 +51,18 @@ bash scripts/create-homebrew-postgres-cluster.sh \
 The script calls `initdb` with an interactive password prompt. Save that password securely. The script **does not** start the database, change app connection settings, migrate existing data, or remove Docker containers. It refuses existing data directories. Create a second separate cluster only when the authentication server's actual requirements have been verified.
 
 **Do not run cluster initialization against a directory containing real PostgreSQL data.** The 5433/5434 mappings are examples from the current Docker setup and must not be assumed available when Docker is running. DB roles, ownership, passwords, schemas, extensions, and actual restore validation still require a later supervised migration. Keep Docker for rollback.
+
+## PostgreSQL 16 Docker backup inventory (phase 4)
+
+Before running these commands, identify each container's actual database name and role from its local Compose configuration. Do not assume they are `postgres`, and do not place passwords in command arguments. Store backups only in a private directory outside the repository.
+
+```bash
+bash scripts/backup-docker-postgres.sh waktrainerserver-db-1 YOUR_DB YOUR_ROLE "$HOME/Developer/private-db-backups"
+bash scripts/verify-postgres-backup.sh "$HOME/Developer/private-db-backups/ACTUAL_FILE.dump"
+```
+
+Repeat separately for `waktrainer-auth-local-db-1` with its actual database and role. These commands do not migrate, stop, delete, or modify Docker data.
+
+**Scope warning:** Each `pg_dump -Fc` includes one database only. Confirm all database names, cluster-level roles, grants, extensions, and ownership requirements before cutover. A valid checksum and `pg_restore --list` do **not** prove restorability: a separate isolated-cluster restore test, counts, schema checks, and application/API verification are required.
+
+Do not commit backups, credentials, connection strings, or database exports to GitHub.
