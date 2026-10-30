@@ -23,6 +23,7 @@ struct ServiceDefinition: Identifiable, Codable, Equatable {
         switch name {
         case "TrisAuthenticationServer": return "/hello"
         case "WakTrainerServer": return "/health"
+        case "Reward Ledger Server": return "/healthz"
         default: return nil
         }
     }
