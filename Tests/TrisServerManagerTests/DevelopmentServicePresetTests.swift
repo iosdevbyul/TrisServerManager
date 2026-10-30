@@ -3,7 +3,7 @@ import XCTest
 
 final class DevelopmentServicePresetTests: XCTestCase {
     func testAllPresetsRequireUserSelectedFolder() {
-        XCTAssertEqual(DevelopmentServicePreset.known.count, 4)
+        XCTAssertEqual(DevelopmentServicePreset.known.count, 5)
         for preset in DevelopmentServicePreset.known {
             XCTAssertTrue(preset.draft().workingDirectory.isEmpty)
             XCTAssertNotNil(preset.draft().validate())
@@ -20,6 +20,14 @@ final class DevelopmentServicePresetTests: XCTestCase {
         let preset = try! XCTUnwrap(DevelopmentServicePreset.known.first { $0.id == "marketlens" })
         XCTAssertEqual(preset.command, "npm run dev")
         XCTAssertNil(preset.port)
+    }
+
+    func testRewardLedgerUsesLocalPythonWithoutDocker() {
+        let preset = try! XCTUnwrap(DevelopmentServicePreset.known.first { $0.id == "reward-ledger" })
+        XCTAssertEqual(preset.command, "python3 server/app.py")
+        XCTAssertEqual(preset.port, 8765)
+        XCTAssertEqual(preset.draft().kind, .command)
+        XCTAssertEqual(preset.group, "TrisAdKit")
     }
 
     func testSwiftServerPresetsHaveExplicitPorts() {
