@@ -1,0 +1,57 @@
+name: GitHub to Trello merged PR sync
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report eligible cards without moving them"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-trello-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted default branch
+        uses: actions/checkout@v4
+
+      - name: Check required configuration
+        env:
+          GH_CROSS_REPO_TOKEN: ${{ secrets.GH_CROSS_REPO_TOKEN }}
+          TRELLO_API_KEY: ${{ secrets.TRELLO_API_KEY }}
+          TRELLO_API_TOKEN: ${{ secrets.TRELLO_API_TOKEN }}
+          TRELLO_BOARD_ID: ${{ vars.TRELLO_BOARD_ID }}
+        run: |
+          set -euo pipefail
+          for name in GH_CROSS_REPO_TOKEN TRELLO_API_KEY TRELLO_API_TOKEN TRELLO_BOARD_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error title=Missing configuration::Set $name in repository secrets or variables."
+              exit 1
+            fi
+          done
+
+      - name: Sync completed PRs
+        env:
+          GH_CROSS_REPO_TOKEN: ${{ secrets.GH_CROSS_REPO_TOKEN }}
+          TRELLO_API_KEY: ${{ secrets.TRELLO_API_KEY }}
+          TRELLO_API_TOKEN: ${{ secrets.TRELLO_API_TOKEN }}
+          TRELLO_BOARD_ID: ${{ vars.TRELLO_BOARD_ID }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "$DRY_RUN" = "true" ]; then
+            python3 scripts/sync_merged_prs_to_trello.py --dry-run
+          else
+            python3 scripts/sync_merged_prs_to_trello.py
+          fi
