@@ -1,0 +1,166 @@
+name: Reusable Codex CI Auto Fix
+
+on:
+  workflow_call:
+    secrets:
+      OPENAI_API_KEY:
+        required: true
+      AUTOFIX_PUSH_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    if: ${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    outputs:
+      ready: ${{ steps.prepare.outputs.ready }}
+      changed: ${{ steps.patch.outputs.changed }}
+    steps:
+      - name: Verify trusted failed PR and retry limit
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          gh api "repos/$REPO/commits/$SHA/pulls" > /tmp/related.json
+          jq --arg sha "$SHA" --arg repo "$REPO" '
+            [.[] | select(.state=="open" and .draft==false and .base.ref=="main" and
+              .base.repo.full_name==$repo and .head.repo.full_name==$repo and
+              .head.sha==$sha and .user.login=="iosdevbyul")]' /tmp/related.json > /tmp/eligible.json
+          [ "$(jq length /tmp/eligible.json)" = 1 ] || exit 0
+          pr=$(jq -r '.[0].number' /tmp/eligible.json)
+          gh api "repos/$REPO/issues/$pr" > /tmp/issue.json
+          if jq -e '[.labels[].name] | index("manual-qa") != null or index("no-autofix") != null' /tmp/issue.json >/dev/null; then
+            exit 0
+          fi
+          gh api --paginate "repos/$REPO/pulls/$pr/commits?per_page=100" > /tmp/commits.json
+          attempts=$(jq '[.[].commit.message | select(contains("[codex-autofix]"))] | length' /tmp/commits.json)
+          [ "$attempts" -lt 2 ] || { echo "Maximum 2 retries reached"; exit 0; }
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.prepare.outputs.ready == 'true'
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Repair only the failing CI
+        if: steps.prepare.outputs.ready == 'true'
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          sandbox: workspace-write
+          prompt: |
+            Fix only the failing CI build or tests for this existing user-authorized PR.
+            Source: ${{ github.repository }}.
+            Failed workflow URL: ${{ github.event.workflow_run.html_url }}.
+            Use existing repository context, inspect local code, and make minimal changes.
+            Do not start new features, modify GitHub workflows, alter secrets, remove tests,
+            change security configuration, or modify unrelated files.
+            Do not push, commit, open a new PR, or change main.
+            If failure cannot be fixed safely from the available information, make no changes.
+
+      - name: Store patch without credentials
+        if: steps.prepare.outputs.ready == 'true'
+        id: patch
+        run: |
+          set -euo pipefail
+          git add -N .
+          git diff --binary HEAD > "$RUNNER_TEMP/codex.patch"
+          if [ -s "$RUNNER_TEMP/codex.patch" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: steps.patch.outputs.changed == 'true'
+        with:
+          name: codex-ci-fix
+          path: ${{ runner.temp }}/codex.patch
+          retention-days: 2
+
+  publish:
+    needs: generate
+    if: needs.generate.outputs.ready == 'true' && needs.generate.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: codex-ci-fix
+          path: ${{ runner.temp }}
+
+      - name: Verify unchanged PR and patch scope
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPO/commits/$SHA/pulls" > "$RUNNER_TEMP/related.json"
+          jq --arg sha "$SHA" --arg repo "$REPO" '
+            [.[] | select(.state=="open" and .draft==false and .base.ref=="main" and
+              .base.repo.full_name==$repo and .head.repo.full_name==$repo and
+              .head.sha==$sha and .user.login=="iosdevbyul")]' "$RUNNER_TEMP/related.json" > "$RUNNER_TEMP/eligible.json"
+          [ "$(jq length "$RUNNER_TEMP/eligible.json")" = 1 ] || exit 1
+          pr=$(jq -r '.[0].number' "$RUNNER_TEMP/eligible.json")
+          branch=$(jq -r '.[0].head.ref' "$RUNNER_TEMP/eligible.json")
+          gh api "repos/$REPO/issues/$pr" > "$RUNNER_TEMP/issue.json"
+          if jq -e '[.labels[].name] | index("manual-qa") != null or index("no-autofix") != null' "$RUNNER_TEMP/issue.json" >/dev/null; then
+            echo "Auto fix disabled by label."
+            exit 1
+          fi
+          gh api --paginate "repos/$REPO/pulls/$pr/commits?per_page=100" > "$RUNNER_TEMP/commits.json"
+          attempts=$(jq '[.[].commit.message | select(contains("[codex-autofix]"))] | length' "$RUNNER_TEMP/commits.json")
+          [ "$attempts" -lt 2 ] || exit 1
+          [ -s "$RUNNER_TEMP/codex.patch" ] || exit 1
+          [ "$(wc -c < "$RUNNER_TEMP/codex.patch")" -lt 200000 ] || exit 1
+          git apply --check "$RUNNER_TEMP/codex.patch"
+          git apply "$RUNNER_TEMP/codex.patch"
+          git status --porcelain | grep -q .
+          while IFS= read -r path; do
+            case "$path" in
+              .github/*|*.xcworkspace/*|*.xcodeproj/*|*.p12|*.mobileprovision|*.entitlements|*Secrets*|*secret*|*Token*|*token*)
+                echo "Protected path changed: $path"
+                exit 1;;
+            esac
+          done < <(git diff --name-only HEAD)
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Push corrected commit to the existing PR only
+        env:
+          PUSH_TOKEN: ${{ secrets.AUTOFIX_PUSH_TOKEN }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO: ${{ github.repository }}
+          TARGET_BRANCH: ${{ steps.verify.outputs.branch }}
+        run: |
+          set -euo pipefail
+          [ -n "$PUSH_TOKEN" ] || exit 1
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix - repair failing CI [codex-autofix]"
+          # A personal access token causes a fresh PR CI run; GITHUB_TOKEN pushes do not.
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 -w0)" \
+            push origin HEAD:"refs/heads/$TARGET_BRANCH" --force-with-lease="refs/heads/$TARGET_BRANCH:$HEAD_SHA"
