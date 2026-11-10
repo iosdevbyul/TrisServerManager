@@ -109,9 +109,11 @@ enum ProjectDiscovery {
             !existing.contains { service in
                 service.kind == candidate.definition.kind &&
                 normalizedDirectory(service) == normalizedDirectory(candidate.definition) &&
-                service.command.trimmingCharacters(in: .whitespacesAndNewlines) ==
-                    candidate.definition.command.trimmingCharacters(in: .whitespacesAndNewlines) &&
-                (service.kind == .dockerCompose || service.port == candidate.definition.port)
+                (candidate.definition.name == "TrisDashboard" &&
+                 service.name.caseInsensitiveCompare("TrisDashboard") == .orderedSame ||
+                 service.command.trimmingCharacters(in: .whitespacesAndNewlines) ==
+                 candidate.definition.command.trimmingCharacters(in: .whitespacesAndNewlines) &&
+                 (service.kind == .dockerCompose || service.port == candidate.definition.port))
             }
         }.sorted { $0.definition.workingDirectory < $1.definition.workingDirectory }
     }
