@@ -8,6 +8,32 @@ struct DiscoveredService: Identifiable {
 }
 
 enum ProjectDiscovery {
+    // A known FastAPI server is selectable only when its actual entry point and local
+    // virtual-environment Python exist. Folder name or requirements.txt alone is not enough.
+    private static func trisDashboardCandidate(in directory: URL) -> DiscoveredService? {
+        let fm = FileManager.default
+        guard directory.lastPathComponent.caseInsensitiveCompare("TrisDashboard") == .orderedSame,
+              fm.fileExists(atPath: directory.appendingPathComponent("requirements.txt").path),
+              fm.fileExists(atPath: directory.appendingPathComponent("backend/app.py").path) else {
+            return nil
+        }
+        let python = directory.appendingPathComponent(".venv/bin/python")
+        let ready = fm.isExecutableFile(atPath: python.path)
+        let command = ready
+            ? ".venv/bin/python -m uvicorn backend.app:app --host 0.0.0.0 --port 8080"
+            : ""
+        let service = ServiceDefinition(
+            name: "TrisDashboard", kind: .command,
+            workingDirectory: directory.resolvingSymlinksInPath().standardizedFileURL.path,
+            command: command, port: 8080, group: "TrisDashboard",
+            healthCheckPath: "/healthz"
+        )
+        let note = ready
+            ? "Verified project entry point and .venv Python. Exposes port 8080 to trusted LAN; review before starting"
+            : "Review: TrisDashboard found, but .venv/bin/python is missing or not executable. Set up Python 3.11+ first"
+        return .init(definition: service, note: note, isReady: ready)
+    }
+
     static func scan(root: URL, existing: [ServiceDefinition]) -> [DiscoveredService] {
         let fm = FileManager.default
         let root = root.resolvingSymlinksInPath().standardizedFileURL
@@ -33,7 +59,9 @@ enum ProjectDiscovery {
                 fm.fileExists(atPath: url.appendingPathComponent($0).path)
             }
             guard hasManifest else { continue }
-            if name.caseInsensitiveCompare("DonghakStockVision") == .orderedSame {
+            if let dashboard = trisDashboardCandidate(in: url) {
+                candidates.append(dashboard)
+            } else if name.caseInsensitiveCompare("DonghakStockVision") == .orderedSame {
                 let manifest = url.appendingPathComponent("pyproject.toml")
                 let content = (try? String(contentsOf: manifest, encoding: .utf8)) ?? ""
                 let hasAPI = content.contains("dsv-api") && content.contains("donghak_stock_vision.api_cli")
@@ -65,6 +93,9 @@ enum ProjectDiscovery {
             }
         }
         // The root directory may itself be a project; include it without walking its parent.
+        if candidates.isEmpty, let dashboard = trisDashboardCandidate(in: root) {
+            candidates.append(dashboard)
+        }
         if candidates.isEmpty {
             let suggestions = LocalProjectDetector.suggestions(in: root)
             if let suggestion = suggestions.first(where: { $0.id == "npm-dev" || $0.id == "npm-start" }) {
