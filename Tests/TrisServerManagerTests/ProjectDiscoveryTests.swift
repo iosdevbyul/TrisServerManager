@@ -46,6 +46,13 @@ final class ProjectDiscoveryTests: XCTestCase {
         XCTAssertEqual(service.definition.group, "TrisDashboard")
         XCTAssertNil(service.definition.validate())
         XCTAssertTrue(ProjectDiscovery.scan(root: root, existing: [service.definition]).isEmpty)
+        let manuallyRegistered = ServiceDefinition(
+            name: "TrisDashboard", kind: .command,
+            workingDirectory: project.path,
+            command: "/usr/local/bin/python3.11 -m uvicorn backend.app:app --host 0.0.0.0 --port 8080",
+            port: 8080, group: "Personal", healthCheckPath: "/healthz"
+        )
+        XCTAssertTrue(ProjectDiscovery.scan(root: root, existing: [manuallyRegistered]).isEmpty)
 
         let directScan = ProjectDiscovery.scan(root: project, existing: [])
         XCTAssertEqual(directScan.count, 1)
